@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendVerificationEmail } from '@/utils/sendverificationemail';
+import { sendVerificationEmail } from '../../../../../utils/sendverificationemail';
 import prisma from '@/utils/prisma';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto'; // For generating secure tokens
