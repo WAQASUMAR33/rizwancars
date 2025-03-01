@@ -1,0 +1,275 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums for status fields
+enum DistributorStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum VehicleStatus {
+  Pending
+  Transport
+  Inspection
+  Shipped
+  Destination
+  Delievered
+  Sold
+}
+
+enum InvoiceStatus {
+  PAID
+  UNPAID
+}
+
+model Admin {
+  id         Int      @id @default(autoincrement())
+  role       String   @db.VarChar(255)
+  username   String   @db.VarChar(255) @unique
+  password   String   @db.VarChar(255) // Hash in app logic
+  fullname   String   @db.VarChar(255)
+  balance    Float    @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model ContainerBooking {
+  id                            Int      @id @default(autoincrement())
+  actualShipper                 String
+  cyOpen                        String
+  bookingNo                     String   @unique
+  etd                           DateTime
+  cyCutOff                      DateTime
+  eta                           DateTime
+  volume                        String
+  carrier                       String
+  vessel                        String
+  portOfLoading                 String
+  portOfDischarge               String
+  cargoMode                     String
+  placeOfIssue                  String
+  freightTerm                   String
+  shipperName                   String
+  consignee                     String
+  descriptionOfGoods            String   @db.Text    @default("")
+  containerQuantity             Int
+  numbers                       String
+  imagePath                     String   @db.Text   @default("")
+  added_by                      Int    @default(0)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  containerDetails              ContainerDetail[] // Relation
+}
+
+model ContainerDetail {
+  id               Int      @id @default(autoincrement())
+  consigneeName    String
+  notifyParty      String
+  shipperPer       String
+  from             String
+  to               String
+  bookingNo        String
+  note             String   @db.Text
+  imagePath        String   @db.Text   @default("")
+  added_by         Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  containerBooking ContainerBooking? @relation(fields: [bookingNo], references: [bookingNo])
+}
+
+
+model ContainerItemDetail {
+  id           Int      @id @default(autoincrement())
+  itemNo       String
+  chassisNo    String
+  year         String
+  color        String
+  cc           String
+  amount       Decimal
+  vehicleId    Int      // Add this as the foreign key
+  vehicle      AddVehicle @relation(fields: [vehicleId], references: [id]) // Define the relation
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+
+ model AddVehicle {
+  id                   Int      @id @default(autoincrement())
+  invoiceNo            String
+  chassisNo            String
+  maker                String
+  year                 Int
+  color                String
+  engineType           String
+  tenPercentAdd        Decimal
+  recycleAmount        Decimal
+  auctionFee           Decimal
+  auctionFeeAmount     Decimal
+  bidAmount            Decimal
+  commissionAmount     Decimal
+  numberPlateTax       Decimal
+  repairCharges        Decimal
+  totalAmount          Decimal
+  sendingPort          String
+  additionalAmount     String
+  isDocumentRequired   String
+  documentReceiveDate  DateTime?
+  isOwnership          String
+  ownershipDate        DateTime?
+  status               VehicleStatus @default(Pending)
+  distributor_id       Int      @default(1) // Default to distributor ID 1
+  vehicleImages        VehicleImage[]
+  added_by             Int   @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  containerItems       ContainerItemDetail[] // Add this to define the inverse relation
+}
+
+model VehicleImage {
+  id           Int      @id @default(autoincrement())
+  addVehicleId Int
+  imagePath    String   @db.Text
+  addVehicle   AddVehicle @relation(fields: [addVehicleId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+
+model Invoice {
+  id              Int      @id @default(autoincrement())
+  date            DateTime
+  number          Int      @unique
+  amount          Decimal   
+  status          InvoiceStatus @default(UNPAID)
+  auctionHouse    String
+  imagePath       String   @db.Text @default("")
+  amountYen       Decimal  @default(0)
+  added_by        Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Transport {
+  id            Int      @id @default(autoincrement())
+  date          DateTime
+  deliveryDate  DateTime
+  port          String
+  company       String
+  fee           Decimal
+  imagePath     String   @db.Text @default("")
+  vehicleNo     String
+  added_by      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Inspection {
+  id            Int      @id @default(autoincrement())
+  vehicleNo     String
+  company       String
+  date          DateTime
+  amount        Float
+  imagePath     String  @db.Text @default("")
+  added_by      Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model SeaPort {
+  id         Int      @id @default(autoincrement())
+  title      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Distributor {
+  id         Int              @id @default(autoincrement())
+  name       String
+  location   String
+  username   String           @unique
+  password   String           // Hash in app logic
+  balance    Float            @default(0)
+  status     DistributorStatus @default(ACTIVE)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+}
+
+model VehicleConsignment {
+  id             Int      @id @default(autoincrement())
+  containerId    Int
+  sealNo         String
+  invoiceTo      String
+  shipper        String
+  date           DateTime
+  refNo          String
+  equipNo        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model CustomerInformation {
+  id           Int      @id @default(autoincrement())
+  customerNo   String   // Changed from Int for flexibility
+  mobileNo     String   // Changed from Int for phone numbers
+  passportNo   String   // Changed from Int for alphanumeric support
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model SaleVehicleInformation {
+  id            Int      @id @default(autoincrement())
+  commission    Decimal
+  repairCost    Decimal
+  price         Decimal
+  status        String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  username   String   @db.VarChar(255) @unique
+  password   String   @db.VarChar(255) // Hash in app logic
+  fullname   String   @db.VarChar(255)
+  token      String   @db.VarChar(255)
+  createdAt  DateTime @default(now()) @db.Timestamp(0)
+  updatedAt  DateTime @updatedAt @db.Timestamp(0)
+  role       String   @db.VarChar(255)
+  status     String   @default("Active") @db.VarChar(255)
+  terminal   Int
+}
+
+
+
+model Transactions {
+  id         Int      @id @default(autoincrement())
+  admin_id   Int  
+  distributor_id   Int 
+  amountin     Float    @default(0)
+  amountout    Float    @default(0)
+  preBalance   Float    @default(0)
+  balance      Float    @default(0)
+  details      String   @db.VarChar(255)
+  added_by     Int
+  createdAt  DateTime @default(now()) @db.Timestamp(0)
+  updatedAt  DateTime @updatedAt @db.Timestamp(0)
+}
+
+
+model Expenses {
+  id         Int      @id @default(autoincrement())
+  admin_id   Int  
+  expense_title   String 
+  expense_description    String     @db.Text @default("")
+  amount    Float    @default(0)
+  added_by     Int
+  createdAt  DateTime @default(now()) @db.Timestamp(0)
+  updatedAt  DateTime @updatedAt @db.Timestamp(0)
+}
