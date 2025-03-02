@@ -7,18 +7,13 @@ import {
   Card,
   CardContent,
   CardActionArea,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Tooltip,
   Divider,
+  Tooltip,
 } from '@mui/material';
 import { PersonOutline as UserCircleIcon, GroupOutlined as UserGroupIcon } from '@mui/icons-material';
 import { Providers } from '../Store/Provider';
 import UserChecker from '../admin-dashboard/Usercheck';
+import LoginModal from './components/LoginModel'; // Adjust path as needed
 
 const RoleCard = ({ title, icon: Icon, onClick, description }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -59,91 +54,19 @@ const RoleCard = ({ title, icon: Icon, onClick, description }) => {
   );
 };
 
-const LoginModal = ({ isOpen, onClose, role }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    // Simulate login API call
-    setTimeout(() => {
-      console.log(`Logging in as ${role} with username: ${username}`);
-      setIsSubmitting(false);
-      onClose();
-    }, 1000);
-  };
-
-  return (
-    <Dialog
-      open={isOpen}
-      onClose={onClose}
-      maxWidth="xs"
-      fullWidth
-      PaperProps={{
-        sx: { borderRadius: 2, bgcolor: 'background.paper' },
-      }}
-    >
-      <DialogTitle sx={{ textAlign: 'center', py: 3 }}>
-        <Typography variant="h5">{role} Login</Typography>
-      </DialogTitle>
-      <Divider />
-      <DialogContent>
-        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField
-            label="Username"
-            variant="outlined"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            fullWidth
-            required
-            autoFocus
-          />
-          <TextField
-            label="Password"
-            type="password"
-            variant="outlined"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            fullWidth
-            required
-          />
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ p: 3 }}>
-        <Button
-          onClick={onClose}
-          variant="outlined"
-          sx={{ mr: 2, '&:hover': { bgcolor: 'grey.100' } }}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          color="primary"
-          disabled={isSubmitting || !username || !password}
-          sx={{ '&:hover': { bgcolor: 'primary.dark' } }}
-        >
-          {isSubmitting ? 'Logging in...' : 'Login'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
-
 const AdminLoginPage = () => {
   const [modalState, setModalState] = useState({
-    isOpen: true,
+    isOpen: false, // Modal starts closed
     role: null,
   });
 
   const openModal = (role) => {
+    console.log(`[CHECKPOINT P1] Opening modal with role: ${role}`);
     setModalState({ isOpen: true, role });
   };
 
   const closeModal = () => {
+    console.log("[CHECKPOINT P2] Closing modal");
     setModalState({ isOpen: false, role: null });
   };
 

@@ -273,3 +273,25 @@ model Expenses {
   createdAt  DateTime @default(now()) @db.Timestamp(0)
   updatedAt  DateTime @updatedAt @db.Timestamp(0)
 }
+
+model RizwanCars {
+  id         Int      @id @default(autoincrement())
+  balance    Float   @default(0)
+  title   String 
+  createdAt  DateTime @default(now()) @db.Timestamp(0)
+  updatedAt  DateTime @updatedAt @db.Timestamp(0)
+}
+
+
+
+model Expenses {
+  id         Int      @id @default(autoincrement())
+  admin_id   Int 
+  role       String  @default("")
+  expense_title   String 
+  expense_description    String     @db.Text @default("")
+  amount    Float    @default(0)
+  added_by     Int
+  createdAt  DateTime @default(now()) @db.Timestamp(0)
+  updatedAt  DateTime @updatedAt @db.Timestamp(0)
+}

@@ -4,8 +4,13 @@ import { useRouter } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { Logout } from "@/app/Store/Slice";
 import Image from "next/image";
-
-// MUI Imports
+import { FaFileInvoice } from "react-icons/fa6";
+import { FiMenu } from "react-icons/fi";
+import { FaListOl } from "react-icons/fa";// MUI Imports
+import { IoIosAddCircle } from "react-icons/io";
+import { MdEmojiTransportation } from "react-icons/md";
+import { FaCar } from "react-icons/fa";
+import { GiCargoShip } from "react-icons/gi";
 import {
   Drawer,
   List,
@@ -88,12 +93,12 @@ const Sidebar = () => {
     {
       title: "User's Management",
       path: "/admin-dashboard/Agent-Management",
-      icon: <FaUserTie />,
+      icon: <FaUsers />,
       roles: ["admin", "sub admin"],
     },
     {
       title: "Main Management",
-      icon: <Hotel />,
+      icon: <FiMenu />,
       roles: ["admin", "sub admin"],
       subitems: [
         { title: "Sea Ports", path: "/admin-dashboard/Sea-ports", icon: <Hotel />, roles: ["admin", "sub admin"] },
@@ -102,33 +107,30 @@ const Sidebar = () => {
     },
     {
       title: "Invoices",
-      icon: <Hotel />,
+      icon: <FaFileInvoice  />,
       roles: ["admin", "sub admin"],
       subitems: [
-        { title: "New Invoice", path: "/admin-dashboard/Invoice-Form/NewInvoice", icon: <PlaneLanding />, roles: ["admin", "sub admin"] },
-        { title: "Invoice's List", path: "/admin-dashboard/Invoice-Form", icon: <PlaneLanding />, roles: ["admin", "sub admin"] },
-        { title: "Incomplete Invoices", path: "/admin-dashboard/Hotel-Management/Hotel-Booking", icon: <PiHandWithdraw />, roles: ["admin", "sub admin"] },
-        { title: "Transportation", path: "/admin-dashboard/Transportation", icon: <FaBoxOpen />, roles: ["admin", "sub admin"] },
-        { title: "Cargo Bookings", path: "/admin-dashboard/Package-Booking-Management", icon: <FaBoxOpen />, roles: ["admin", "sub admin"] },
-        { title: "Payment Requests", path: "/admin-dashboard/Payment-Management", icon: <BiCoinStack />, roles: ["admin", "sub admin"] },
-      ],
+        { title: "New Invoice", path: "/admin-dashboard/Invoice-Form/NewInvoice", icon: <IoIosAddCircle  />, roles: ["admin", "sub admin"] },
+        { title: "Invoice's List", path: "/admin-dashboard/Invoice-Form", icon: <FaListOl />, roles: ["admin", "sub admin"] },
+        { title: "Incomplete Invoices", path: "/admin-dashboard/Hotel-Management/Hotel-Booking", icon: <FaListOl />, roles: ["admin", "sub admin"] },
+       ],
     },
     {
       title: "Veichle Management",
       path: "/admin-dashboard/Package-Management",
-      icon: <FaBoxOpen />,
+      icon: <FaCar />,
       roles: ["admin", "sub admin"],
     },
     {
       title: "Transport Management",
       path: "/admin-dashboard/Transport-Management",
-      icon: <FaBoxOpen />,
+      icon: <MdEmojiTransportation  />,
       roles: ["admin", "sub admin"],
     },
     {
       title: "Cargo Management",
       path: "/admin-dashboard/Package-Management",
-      icon: <FaBoxOpen />,
+      icon: <GiCargoShip  />,
       roles: ["admin", "sub admin"],
     },
     {
