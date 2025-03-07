@@ -178,9 +178,9 @@ const Sidebar = () => {
     >
       <LogoContainer>
         <Image
-          src="/logo/logo1.jpg"
-          width={80}
-          height={80}
+          src="/logo.png"
+          width={180}
+          height={100}
           alt="logo"
           style={{ transition: "all 0.3s ease" }}
         />
