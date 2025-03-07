@@ -1,4 +1,5 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
@@ -6,7 +7,7 @@ import { Logout } from "@/app/Store/Slice";
 import Image from "next/image";
 import { FaFileInvoice } from "react-icons/fa6";
 import { FiMenu } from "react-icons/fi";
-import { FaListOl } from "react-icons/fa";// MUI Imports
+import { FaListOl } from "react-icons/fa";
 import { IoIosAddCircle } from "react-icons/io";
 import { MdEmojiTransportation } from "react-icons/md";
 import { FaCar } from "react-icons/fa";
@@ -29,20 +30,16 @@ import {
   ExpandMore,
   AnalyticsOutlined,
 } from "@mui/icons-material";
-
-// Other Icon Imports
 import {
   FaUsers,
   FaUserTie,
   FaBoxOpen,
   FaCog,
   FaSignOutAlt,
-  FaChevronDown,
 } from "react-icons/fa";
 import { MdHistory } from "react-icons/md";
-import { PiBank, PiHandWithdraw } from "react-icons/pi";
-import { BiCoinStack } from "react-icons/bi";
-import { Hotel, PlaneLanding } from "lucide-react";
+import { PiBank } from "react-icons/pi";
+import { Hotel } from "lucide-react";
 
 // Styled Components
 const SidebarContainer = styled(Drawer)(({ theme }) => ({
@@ -78,9 +75,13 @@ const Sidebar = () => {
     }));
   };
 
+  const handleNavigation = (path) => {
+    router.push(path); // Use Next.js router for navigation
+  };
+
   const handleLogout = () => {
     dispatch(Logout());
-    window.location.href = "/";
+    router.push("/"); // Use router instead of window.location.href
   };
 
   const menuItems = [
@@ -107,31 +108,47 @@ const Sidebar = () => {
     },
     {
       title: "Invoices",
-      icon: <FaFileInvoice  />,
+      icon: <FaFileInvoice />,
       roles: ["admin", "sub admin"],
       subitems: [
-        { title: "New Invoice", path: "/admin-dashboard/Invoice-Form/NewInvoice", icon: <IoIosAddCircle  />, roles: ["admin", "sub admin"] },
+        { title: "New Invoice", path: "/admin-dashboard/Invoice-Form/NewInvoice", icon: <IoIosAddCircle />, roles: ["admin", "sub admin"] },
         { title: "Invoice's List", path: "/admin-dashboard/Invoice-Form", icon: <FaListOl />, roles: ["admin", "sub admin"] },
         { title: "Incomplete Invoices", path: "/admin-dashboard/Hotel-Management/Hotel-Booking", icon: <FaListOl />, roles: ["admin", "sub admin"] },
-       ],
+      ],
     },
     {
-      title: "Veichle Management",
-      path: "/admin-dashboard/Package-Management",
+      title: "Vehicle Management",
+      path: "/admin-dashboard/Invoice-Form/vehicle_list",
       icon: <FaCar />,
       roles: ["admin", "sub admin"],
     },
     {
-      title: "Transport Management",
-      path: "/admin-dashboard/Transport-Management",
-      icon: <MdEmojiTransportation  />,
+      title: "Vehicle Inspection",
+      icon: <MdEmojiTransportation />,
       roles: ["admin", "sub admin"],
+      subitems: [
+        { title: "New Inspection", path: "/admin-dashboard/Inspection-management/NewInspection", icon: <IoIosAddCircle />, roles: ["admin", "sub admin"] },
+        { title: "Inspection List", path: "/admin-dashboard/Inspection-management", icon: <FaListOl />, roles: ["admin", "sub admin"] },
+      ],
+    },
+    {
+      title: "Transport Management",
+      icon: <MdEmojiTransportation />,
+      roles: ["admin", "sub admin"],
+      subitems: [
+        { title: "New Transport", path: "/admin-dashboard/Transportation/NewTransportation", icon: <IoIosAddCircle />, roles: ["admin", "sub admin"] },
+        { title: "Transport List", path: "/admin-dashboard/Transportation", icon: <FaListOl />, roles: ["admin", "sub admin"] },
+
+      ],
     },
     {
       title: "Cargo Management",
-      path: "/admin-dashboard/Package-Management",
-      icon: <GiCargoShip  />,
+      icon: <GiCargoShip />,
       roles: ["admin", "sub admin"],
+      subitems: [
+        { title: "New Shipment", path: "/admin-dashboard/cargo-management/NewCargo", icon: <IoIosAddCircle />, roles: ["admin", "sub admin"] },
+        { title: "Cargo List", path: "/admin-dashboard/cargo-management", icon: <FaListOl />, roles: ["admin", "sub admin"] },
+      ],
     },
     {
       title: "Ledgers",
@@ -175,8 +192,7 @@ const Sidebar = () => {
         {/* Analytics Item */}
         <ListItem disablePadding>
           <ListItemButton
-            component="a"
-            href="/admin-dashboard/Analytics"
+            onClick={() => handleNavigation("/admin-dashboard/Analytics")}
             sx={{
               borderRadius: 1,
               "&:hover": { bgcolor: "action.hover" },
@@ -200,7 +216,7 @@ const Sidebar = () => {
                 <Tooltip title={item.title} placement="right" arrow>
                   <ListItemButton
                     onClick={() =>
-                      item.path ? router.push(item.path) : toggleDropdown(item.title)
+                      item.path ? handleNavigation(item.path) : toggleDropdown(item.title)
                     }
                     sx={{
                       borderRadius: 1,
@@ -216,11 +232,7 @@ const Sidebar = () => {
                       primaryTypographyProps={{ variant: "body2" }}
                     />
                     {item.subitems && (
-                      openDropdowns[item.title] ? (
-                        <ExpandLess />
-                      ) : (
-                        <ExpandMore />
-                      )
+                      openDropdowns[item.title] ? <ExpandLess /> : <ExpandMore />
                     )}
                   </ListItemButton>
                 </Tooltip>
@@ -238,8 +250,7 @@ const Sidebar = () => {
                       subitem.roles.includes(userRole) ? (
                         <ListItem key={subitem.title} disablePadding>
                           <ListItemButton
-                            component="a"
-                            href={subitem.path}
+                            onClick={() => handleNavigation(subitem.path)}
                             sx={{
                               borderRadius: 1,
                               "&:hover": { bgcolor: "action.hover" },
@@ -289,4 +300,4 @@ const Sidebar = () => {
   );
 };
 
-export default Sidebar;
+export default Sidebar;  

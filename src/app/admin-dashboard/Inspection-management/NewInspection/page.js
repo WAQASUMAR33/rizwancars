@@ -11,9 +11,24 @@ import {
 import { Add as PlusIcon, Delete as TrashIcon } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 
+async function getExchangeRate() {
+  try {
+    const response = await fetch(
+      `https://v6.exchangerate-api.com/v6/${process.env.NEXT_PUBLIC_EXCHANGE_RATE_API_KEY}/pair/JPY/USD`
+    );
+    if (!response.ok) throw new Error("Failed to fetch exchange rate");
+    const data = await response.json();
+    return data.conversion_rate || 0.0067; // Fallback rate if API fails
+  } catch (error) {
+    console.error("Error fetching exchange rate:", error);
+    return 0.0067; // Default fallback rate (approx JPY to USD)
+  }
+}
+
 export default function InspectionBookingForm() {
   const [vehicles, setVehicles] = useState([]);
   const [searchChassisNo, setSearchChassisNo] = useState("");
+  const [exchangeRate, setExchangeRate] = useState(0);
   const [inspectionData, setInspectionData] = useState({
     date: "",
     company: "",
@@ -21,7 +36,8 @@ export default function InspectionBookingForm() {
     added_by: null,
     vehicles: [],
   });
-  const [totalAmount, setTotalAmount] = useState(0);
+  const [totalAmountYen, setTotalAmountYen] = useState(0);
+  const [totalAmountDollars, setTotalAmountDollars] = useState(0);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -30,15 +46,30 @@ export default function InspectionBookingForm() {
   const username = useSelector((state) => state.user.username);
   const userid = useSelector((state) => state.user.id);
 
+  // Set added_by from Redux state
   useEffect(() => {
     setInspectionData((prev) => ({ ...prev, added_by: userid }));
   }, [userid]);
 
+  // Fetch exchange rate on mount
   useEffect(() => {
-    const total = inspectionData.vehicles.reduce((sum, vehicle) => 
-      sum + (parseFloat(vehicle.amount) || 0), 0);
-    setTotalAmount(total);
-  }, [inspectionData.vehicles]);
+    const fetchExchangeRate = async () => {
+      const rate = await getExchangeRate();
+      setExchangeRate(rate);
+    };
+    fetchExchangeRate();
+  }, []);
+
+  // Calculate total amounts when vehicles or exchange rate changes
+  useEffect(() => {
+    const totalYen = inspectionData.vehicles.reduce(
+      (sum, vehicle) => sum + (parseFloat(vehicle.amount) || 0),
+      0
+    );
+    const totalDollars = totalYen * exchangeRate;
+    setTotalAmountYen(totalYen);
+    setTotalAmountDollars(totalDollars);
+  }, [inspectionData.vehicles, exchangeRate]);
 
   const searchVehicle = async () => {
     if (!searchChassisNo) {
@@ -75,11 +106,15 @@ export default function InspectionBookingForm() {
         if (fullVehicle.status === "Transport") {
           setInspectionData((prev) => ({
             ...prev,
-            vehicles: [...prev.vehicles, {
-              id: fullVehicle.id,
-              chassisNo: fullVehicle.chassisNo,
-              amount: "",
-            }],
+            vehicles: [
+              ...prev.vehicles,
+              {
+                id: fullVehicle.id,
+                chassisNo: fullVehicle.chassisNo,
+                amount: "", // Yen input
+                amount_doller: 0, // Calculated Dollars
+              },
+            ],
           }));
           setVehicles([]);
           setSearchChassisNo("");
@@ -95,6 +130,12 @@ export default function InspectionBookingForm() {
   const updateVehicleInspection = (index, field, value) => {
     const updatedVehicles = [...inspectionData.vehicles];
     updatedVehicles[index][field] = value;
+
+    if (field === "amount") {
+      const amountYen = parseFloat(value) || 0;
+      updatedVehicles[index].amount_doller = amountYen * exchangeRate;
+    }
+
     setInspectionData((prev) => ({ ...prev, vehicles: updatedVehicles }));
   };
 
@@ -144,9 +185,7 @@ export default function InspectionBookingForm() {
       if (inspectionData.receiptImage) {
         const base64Image = await convertToBase64(inspectionData.receiptImage[0]);
         imagePath = await uploadImageToServer(base64Image);
-        if (!imagePath) {
-          throw new Error("Failed to upload receipt image");
-        }
+        if (!imagePath) throw new Error("Failed to upload receipt image");
       }
 
       const payload = {
@@ -157,8 +196,10 @@ export default function InspectionBookingForm() {
         updatedAt: new Date().toISOString(),
         added_by: inspectionData.added_by,
         vehicles: inspectionData.vehicles.map((v) => ({
-          ...v,
+          vehicleNo: v.chassisNo,
           amount: parseFloat(v.amount) || 0,
+          amount_doller: parseFloat(v.amount_doller) || 0,
+          id: v.id, // Include id for status update
         })),
       };
 
@@ -170,11 +211,12 @@ export default function InspectionBookingForm() {
         body: JSON.stringify(payload),
       });
 
+      const responseData = await response.json();
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to submit inspection data");
+        throw new Error(responseData.details || "Failed to submit inspection data");
       }
 
+      console.log("Submission response:", responseData);
       alert("Inspection data submitted successfully!");
       setInspectionData({
         date: "",
@@ -185,7 +227,7 @@ export default function InspectionBookingForm() {
       });
       setImagePreview(null);
     } catch (error) {
-      console.error("Error submitting inspection data:", error);
+      console.error("Error submitting inspection data:", error.stack || error);
       alert(`Failed to submit: ${error.message}`);
     } finally {
       setSubmitting(false);
@@ -212,6 +254,7 @@ export default function InspectionBookingForm() {
             onChange={(e) => handleInputChange("date", e.target.value)}
             InputLabelProps={{ shrink: true }}
             fullWidth
+            required
           />
           <TextField
             label="Company"
@@ -219,6 +262,7 @@ export default function InspectionBookingForm() {
             value={inspectionData.company}
             onChange={(e) => handleInputChange("company", e.target.value)}
             fullWidth
+            required
           />
           <Box display="flex" flexDirection="column">
             <TextField
@@ -302,22 +346,31 @@ export default function InspectionBookingForm() {
           </Typography>
         ) : (
           <Box>
-            <Box display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={2} sx={{ fontWeight: "bold", mb: 1 }}>
+            <Box display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr" gap={2} sx={{ fontWeight: "bold", mb: 1 }}>
               <Typography variant="body1">Vehicle ID</Typography>
               <Typography variant="body1">Chassis No</Typography>
-              <Typography variant="body1">Amount</Typography>
+              <Typography variant="body1">Amount (Yen)</Typography>
+              <Typography variant="body1">Amount (USD)</Typography>
               <Typography variant="body1">Actions</Typography>
             </Box>
             {inspectionData.vehicles.map((vehicle, index) => (
-              <Box key={index} display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={2} alignItems="center" mb={1}>
+              <Box key={index} display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr" gap={2} alignItems="center" mb={1}>
                 <Typography variant="body1">{vehicle.id}</Typography>
                 <Typography variant="body1">{vehicle.chassisNo}</Typography>
                 <TextField
                   type="number"
-                  label="Amount"
+                  label="Amount (Yen)"
                   variant="outlined"
                   value={vehicle.amount}
                   onChange={(e) => updateVehicleInspection(index, "amount", e.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  type="number"
+                  label="Amount (USD)"
+                  variant="outlined"
+                  value={(vehicle.amount_doller || 0).toFixed(2)}
+                  InputProps={{ readOnly: true }}
                   fullWidth
                 />
                 <Button
@@ -330,9 +383,12 @@ export default function InspectionBookingForm() {
                 </Button>
               </Box>
             ))}
-            <Box mt={2}>
+            <Box mt={2} display="flex" gap={2}>
               <Typography variant="body1" sx={{ fontWeight: "bold" }}>
-                Total Amount: {totalAmount.toFixed(2)}
+                Total Amount (Yen): {totalAmountYen.toFixed(2)}
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: "bold" }}>
+                Total Amount (USD): {totalAmountDollars.toFixed(2)}
               </Typography>
             </Box>
           </Box>
@@ -350,4 +406,5 @@ export default function InspectionBookingForm() {
       </Button>
     </Box>
   );
-}
+};
+

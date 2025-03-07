@@ -3,28 +3,28 @@
 import { toast, ToastContainer } from 'react-toastify';
 import { useState, useEffect } from 'react';
 import {
-  PencilIcon,
-  TrashIcon,
-  PlusIcon,
-} from '@heroicons/react/24/solid';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+  Edit as PencilIcon,
+  Delete as TrashIcon,
+  Add as PlusIcon,
+} from '@mui/icons-material';
+import { Button } from '@mui/material';
+import { TextField } from '@mui/material';
 import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
-  TableHeader,
   TableRow,
-} from '@/components/ui/table';
+  Paper,
+} from '@mui/material';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Loader } from 'lucide-react';
+  DialogActions,
+} from '@mui/material';
+import { CircularProgress } from '@mui/material';
 import 'react-toastify/dist/ReactToastify.css';
 
 // Fetch all bank accounts
@@ -153,67 +153,74 @@ export default function BankAccountManagement() {
   return (
     <div>
       <ToastContainer />
-      <div className="p-6">
-        <div className="mb-6 flex justify-between items-center">
-          <Input
-            type="text"
-            placeholder="Search accounts..."
+      <div style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <TextField
+            label="Search accounts..."
+            variant="outlined"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-auto"
+            style={{ width: '300px' }}
           />
-          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={handleAddAccount} className="bg-indigo-600">
-                <PlusIcon className="h-5 w-5 mr-2" />
-                Add Account
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl">
-              <DialogHeader>
-                <DialogTitle>{currentAccount ? 'Update Account' : 'Add Account'}</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit}>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  {['bank_title', 'account_title', 'account_no'].map((field) => (
-                    <div key={field}>
-                      <label htmlFor={field} className="block text-sm font-medium">
-                        {field.replace('_', ' ').toUpperCase()}
-                      </label>
-                      <Input
-                        type="text"
-                        name={field}
-                        defaultValue={currentAccount?.[field]}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <Button type="submit" className="w-full" disabled={loadingAction === 'form'}>
-                  {loadingAction === 'form' && <Loader className="mr-2 animate-spin" />}
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<PlusIcon />}
+            onClick={handleAddAccount}
+          >
+            Add Account
+          </Button>
+        </div>
+
+        <Dialog open={isModalOpen} onClose={() => setIsModalOpen(false)}>
+          <DialogTitle>{currentAccount ? 'Update Account' : 'Add Account'}</DialogTitle>
+          <DialogContent>
+            <form onSubmit={handleSubmit}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                {['bank_title', 'account_title', 'account_no'].map((field) => (
+                  <TextField
+                    key={field}
+                    label={field.replace('_', ' ').toUpperCase()}
+                    name={field}
+                    defaultValue={currentAccount?.[field]}
+                    variant="outlined"
+                    fullWidth
+                  />
+                ))}
+              </div>
+              <DialogActions>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  disabled={loadingAction === 'form'}
+                  startIcon={loadingAction === 'form' && <CircularProgress size={20} />}
+                >
                   {currentAccount ? 'Update' : 'Add'} Account
                 </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
+              </DialogActions>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {isLoading ? (
-          <div className="flex justify-center">
-            <Loader className="h-8 w-8 animate-spin" />
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress />
           </div>
         ) : (
-          <div className="overflow-auto max-h-[72vh]">
-            <Table>
-              <TableHeader>
+          <TableContainer component={Paper} style={{ maxHeight: '72vh', overflow: 'auto' }}>
+            <Table stickyHeader>
+              <TableHead>
                 <TableRow>
-                  <TableHead>No.</TableHead>
-                  <TableHead>Bank Title</TableHead>
-                  <TableHead>Account Title</TableHead>
-                  <TableHead>Account No</TableHead>
-                  <TableHead>Created At</TableHead>
-                  <TableHead>Updated At</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableCell>No.</TableCell>
+                  <TableCell>Bank Title</TableCell>
+                  <TableCell>Account Title</TableCell>
+                  <TableCell>Account No</TableCell>
+                  <TableCell>Created At</TableCell>
+                  <TableCell>Updated At</TableCell>
+                  <TableCell>Actions</TableCell>
                 </TableRow>
-              </TableHeader>
+              </TableHead>
               <TableBody>
                 {filteredAccounts.map((account, index) => (
                   <TableRow key={account.id}>
@@ -224,27 +231,30 @@ export default function BankAccountManagement() {
                     <TableCell>{account.created_at}</TableCell>
                     <TableCell>{account.updated_at}</TableCell>
                     <TableCell>
-                      <Button onClick={() => handleUpdateAccount(account)} variant="ghost">
-                        <PencilIcon className="h-4 w-4" />
-                      </Button>
+                      <Button
+                        onClick={() => handleUpdateAccount(account)}
+                        variant="outlined"
+                        startIcon={<PencilIcon />}
+                      />
                       <Button
                         onClick={() => handleDeleteAccount(account.id)}
-                        variant="ghost"
-                        className="text-red-600"
+                        variant="outlined"
+                        color="error"
                         disabled={loadingAction === account.id}
-                      >
-                        {loadingAction === account.id ? (
-                          <Loader className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <TrashIcon className="h-4 w-4" />
-                        )}
-                      </Button>
+                        startIcon={
+                          loadingAction === account.id ? (
+                            <CircularProgress size={20} />
+                          ) : (
+                            <TrashIcon />
+                          )
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </TableContainer>
         )}
       </div>
     </div>

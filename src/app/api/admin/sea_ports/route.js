@@ -6,12 +6,12 @@ import prisma from '../../../../utils/prisma';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { title } = body;
+    const { name, location } = body;
 
     // Validate required fields
-    if (!title) {
+    if (!name) {
       return NextResponse.json(
-        { message: 'Missing required field: title', status: false },
+        { message: 'Missing required field: name', status: false },
         { status: 400 }
       );
     }
@@ -19,7 +19,8 @@ export async function POST(request) {
     // Create a new sea port in the database
     const newSeaPort = await prisma.seaPort.create({
       data: {
-        title, // Only required field; createdAt and updatedAt are auto-managed
+        name,
+        location: location || "", // Optional field, default to empty string if not provided
       },
     });
 
@@ -49,6 +50,9 @@ export async function GET() {
   try {
     const seaPorts = await prisma.seaPort.findMany({
       orderBy: { createdAt: 'desc' }, // Sort by creation date, newest first
+      include: {
+        vehicles: true, // Optionally include related vehicles
+      },
     });
 
     return NextResponse.json(

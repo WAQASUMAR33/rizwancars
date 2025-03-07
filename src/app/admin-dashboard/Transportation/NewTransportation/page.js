@@ -16,10 +16,25 @@ import {
 import { Add as PlusIcon, Delete as TrashIcon, Close as CloseIcon } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 
+async function getExchangeRate() {
+  try {
+    const response = await fetch(
+      `https://v6.exchangerate-api.com/v6/${process.env.NEXT_PUBLIC_EXCHANGE_RATE_API_KEY}/pair/JPY/USD`
+    );
+    if (!response.ok) throw new Error("Failed to fetch exchange rate");
+    const data = await response.json();
+    return data.conversion_rate || 0.0067; // Fallback rate if API fails
+  } catch (error) {
+    console.error("Error fetching exchange rate:", error);
+    return 0.0067; // Default fallback rate (approx JPY to USD as of recent data)
+  }
+}
+
 export default function TransportBookingForm() {
   const [vehicles, setVehicles] = useState([]);
   const [searchChassisNo, setSearchChassisNo] = useState("");
   const [seaPorts, setSeaPorts] = useState([]);
+  const [exchangeRate, setExchangeRate] = useState(0);
 
   const [transportData, setTransportData] = useState({
     date: "",
@@ -30,7 +45,8 @@ export default function TransportBookingForm() {
     added_by: null,
     vehicles: [],
   });
-  const [totalAmount, setTotalAmount] = useState(0);
+  const [totalAmountYen, setTotalAmountYen] = useState(0);
+  const [totalAmountDollars, setTotalAmountDollars] = useState(0);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -44,24 +60,31 @@ export default function TransportBookingForm() {
   }, [userid]);
 
   useEffect(() => {
-    const fetchSeaPorts = async () => {
+    const fetchSeaPortsAndRate = async () => {
       try {
-        const response = await fetch("/api/admin/sea_ports");
-        if (!response.ok) throw new Error("Failed to fetch sea ports");
-        const ports = await response.json();
-        setSeaPorts(ports.data || ports);
+        const [portsResponse, rate] = await Promise.all([
+          fetch("/api/admin/sea_ports"),
+          getExchangeRate(),
+        ]);
+
+        if (!portsResponse.ok) throw new Error("Failed to fetch sea ports");
+        const portsData = await portsResponse.json();
+        setSeaPorts(portsData.data || portsData);
+        setExchangeRate(rate);
       } catch (err) {
-        setError("Error fetching sea ports: " + err.message);
+        setError("Error fetching data: " + err.message);
       }
     };
-    fetchSeaPorts();
+    fetchSeaPortsAndRate();
   }, []);
 
   useEffect(() => {
-    const total = transportData.vehicles.reduce((sum, vehicle) => 
+    const totalYen = transportData.vehicles.reduce((sum, vehicle) => 
       sum + (parseFloat(vehicle.fee) || 0), 0);
-    setTotalAmount(total);
-  }, [transportData.vehicles]);
+    const totalDollars = totalYen * exchangeRate;
+    setTotalAmountYen(totalYen);
+    setTotalAmountDollars(totalDollars);
+  }, [transportData.vehicles, exchangeRate]);
 
   const searchVehicle = async () => {
     if (!searchChassisNo) {
@@ -101,7 +124,8 @@ export default function TransportBookingForm() {
             vehicles: [...prev.vehicles, {
               id: fullVehicle.id,
               chassisNo: fullVehicle.chassisNo,
-              fee: "",
+              fee: "", // Yen input
+              fee_doller: 0, // Calculated Dollars
             }],
           }));
           setVehicles([]);
@@ -118,6 +142,12 @@ export default function TransportBookingForm() {
   const updateVehicleTransport = (index, field, value) => {
     const updatedVehicles = [...transportData.vehicles];
     updatedVehicles[index][field] = value;
+
+    if (field === "fee") {
+      const feeYen = parseFloat(value) || 0;
+      updatedVehicles[index].fee_doller = feeYen * exchangeRate;
+    }
+
     setTransportData((prev) => ({ ...prev, vehicles: updatedVehicles }));
   };
 
@@ -162,45 +192,46 @@ export default function TransportBookingForm() {
   const handleSubmit = async () => {
     try {
       setSubmitting(true);
-
+  
       let imagePath = "";
       if (transportData.receiptImage) {
         const base64Image = await convertToBase64(transportData.receiptImage[0]);
         imagePath = await uploadImageToServer(base64Image);
-        if (!imagePath) {
-          throw new Error("Failed to upload receipt image");
-        }
+        if (!imagePath) throw new Error("Failed to upload receipt image");
       }
-
+  
       const payload = {
         date: transportData.date,
         deliveryDate: transportData.deliveryDate,
         port: transportData.port,
         company: transportData.company,
-        fee: totalAmount,
+        fee: totalAmountYen,
+        fee_doller: totalAmountDollars,
         imagePath: imagePath || "",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         added_by: transportData.added_by,
         vehicles: transportData.vehicles.map((v) => ({
-          ...v,
+          id: v.id, // Include id for AddVehicle update
+          vehicleNo: v.chassisNo,
           fee: parseFloat(v.fee) || 0,
+          fee_doller: parseFloat(v.fee_doller) || 0,
         })),
       };
-
+  
       console.log("Data to be submitted:", JSON.stringify(payload, null, 2));
-
+  
       const response = await fetch("/api/admin/transport-management", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to submit transport data");
       }
-
+  
       alert("Transport data submitted successfully!");
       setTransportData({
         date: "",
@@ -261,8 +292,8 @@ export default function TransportBookingForm() {
                 <em>Select Port</em>
               </MenuItem>
               {seaPorts.map((port) => (
-                <MenuItem key={port.id} value={port.title || port.name}>
-                  {port.title || port.name}
+                <MenuItem key={port.id} value={port.name}>
+                  {port.name}
                 </MenuItem>
               ))}
             </Select>
@@ -354,22 +385,31 @@ export default function TransportBookingForm() {
           </Typography>
         ) : (
           <Box>
-            <Box display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={2} sx={{ fontWeight: "bold", mb: 1 }}>
+            <Box display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr" gap={2} sx={{ fontWeight: "bold", mb: 1 }}>
               <Typography variant="body1">Vehicle ID</Typography>
               <Typography variant="body1">Chassis No</Typography>
-              <Typography variant="body1">Amount</Typography>
+              <Typography variant="body1">Amount (Yen)</Typography>
+              <Typography variant="body1">Amount (USD)</Typography>
               <Typography variant="body1">Actions</Typography>
             </Box>
             {transportData.vehicles.map((vehicle, index) => (
-              <Box key={index} display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={2} alignItems="center" mb={1}>
+              <Box key={index} display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr" gap={2} alignItems="center" mb={1}>
                 <Typography variant="body1">{vehicle.id}</Typography>
                 <Typography variant="body1">{vehicle.chassisNo}</Typography>
                 <TextField
                   type="number"
-                  label="Amount"
+                  label="Amount (Yen)"
                   variant="outlined"
                   value={vehicle.fee}
                   onChange={(e) => updateVehicleTransport(index, "fee", e.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  type="number"
+                  label="Amount (USD)"
+                  variant="outlined"
+                  value={(vehicle.fee_doller || 0).toFixed(2)}
+                  InputProps={{ readOnly: true }}
                   fullWidth
                 />
                 <Button
@@ -382,9 +422,12 @@ export default function TransportBookingForm() {
                 </Button>
               </Box>
             ))}
-            <Box mt={2}>
+            <Box mt={2} display="flex" gap={2}>
               <Typography variant="body1" sx={{ fontWeight: "bold" }}>
-                Total Amount: {totalAmount.toFixed(2)}
+                Total Amount (Yen): {totalAmountYen.toFixed(2)}
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: "bold" }}>
+                Total Amount (USD): {totalAmountDollars.toFixed(2)}
               </Typography>
             </Box>
           </Box>
@@ -402,4 +445,4 @@ export default function TransportBookingForm() {
       </Button>
     </Box>
   );
-}
+};

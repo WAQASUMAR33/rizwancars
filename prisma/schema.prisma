@@ -98,39 +98,40 @@ model ContainerItemDetail {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
-
-
- model AddVehicle {
+model AddVehicle {
   id                   Int      @id @default(autoincrement())
   invoiceNo            String
   chassisNo            String
   maker                String
-  year                 Int
+  year                 String
   color                String
   engineType           String
-  tenPercentAdd        Decimal
-  recycleAmount        Decimal
-  auctionFee           Decimal
-  auctionFeeAmount     Decimal
-  bidAmount            Decimal
-  commissionAmount     Decimal
-  numberPlateTax       Decimal
-  repairCharges        Decimal
-  totalAmount          Decimal
-  sendingPort          String
-  additionalAmount     String
+  tenPercentAdd        Float    @default(0)
+  recycleAmount        Float    @default(0)
+  auction_house        String   @default("")
+  bidAmount            Float    @default(0)
+  commissionAmount     Float    @default(0)
+  numberPlateTax       Float    @default(0)
+  repairCharges        Float    @default(0)
+  totalAmount_yen      Float    @default(0)
+  totalAmount_dollers  Float    @default(0)
+  sendingPort          Int?     // Corrected from sandingPort
+  seaPort              SeaPort? @relation("SeaPortVehicles", fields: [sendingPort], references: [id])
+  additionalAmount     Float    @default(0)
   isDocumentRequired   String
   documentReceiveDate  DateTime?
   isOwnership          String
   ownershipDate        DateTime?
   status               VehicleStatus @default(Pending)
-  distributor_id       Int      @default(1) // Default to distributor ID 1
+  distributor_id       Int      @default(1)
   vehicleImages        VehicleImage[]
-  added_by             Int   @default(0)
+  added_by             Int      @default(0)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
-  containerItems       ContainerItemDetail[] // Add this to define the inverse relation
+  containerItems       ContainerItemDetail[]
+  distributor          Distributor @relation("DistributorVehicles", fields: [distributor_id], references: [id])
 }
+
 
 model VehicleImage {
   id           Int      @id @default(autoincrement())
@@ -145,12 +146,12 @@ model VehicleImage {
 model Invoice {
   id              Int      @id @default(autoincrement())
   date            DateTime
-  number          Int      @unique
-  amount          Decimal   
+  number          Int      @unique   
   status          InvoiceStatus @default(UNPAID)
   auctionHouse    String
   imagePath       String   @db.Text @default("")
-  amountYen       Decimal  @default(0)
+  amountYen       Float  @default(0)
+  amount_doller   Float @default(0)
   added_by        Int
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -162,7 +163,8 @@ model Transport {
   deliveryDate  DateTime
   port          String
   company       String
-  fee           Decimal
+  fee           Float @default(0)
+  fee_doller    Float @default(0)
   imagePath     String   @db.Text @default("")
   vehicleNo     String
   added_by      Int      @default(0)
@@ -175,18 +177,22 @@ model Inspection {
   vehicleNo     String
   company       String
   date          DateTime
-  amount        Float
+  amount        Float  @default(0)
+  amount_doller Float  @default(0)
   imagePath     String  @db.Text @default("")
   added_by      Int
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
 
+// SeaPort Model
 model SeaPort {
-  id         Int      @id @default(autoincrement())
-  title      String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  name        String          @default("")
+  location    String?         @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  vehicles    AddVehicle[] @relation("SeaPortVehicles") // Opposite relation field
 }
 
 model Distributor {
@@ -199,8 +205,24 @@ model Distributor {
   status     DistributorStatus @default(ACTIVE)
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
+  vehicles   AddVehicle[]     @relation("DistributorVehicles") // Opposite relation field
+  ledgers    Ledger[]         @relation("DistributorLedger")   // New relation to Ledger
 }
 
+model Ledger {
+  id             Int      @id @default(autoincrement()) // Primary key with auto-increment
+  distributorId  Int      // Foreign key to the Distributor table (renamed from userId)
+  debit          Float    @default(0.0) // Amount debited
+  credit         Float    @default(0.0) // Amount credited
+  balance        Float    @default(0.0) // Current balance
+  description    String?  @db.VarChar(255) // Description of the transaction
+  transaction_at DateTime @default(now())
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  Distributor    Distributor @relation("DistributorLedger", fields: [distributorId], references: [id], onDelete: Cascade)
+
+  @@index([distributorId])
+}
 model VehicleConsignment {
   id             Int      @id @default(autoincrement())
   containerId    Int
@@ -248,32 +270,6 @@ model User {
 
 
 
-model Transactions {
-  id         Int      @id @default(autoincrement())
-  admin_id   Int  
-  distributor_id   Int 
-  amountin     Float    @default(0)
-  amountout    Float    @default(0)
-  preBalance   Float    @default(0)
-  balance      Float    @default(0)
-  details      String   @db.VarChar(255)
-  added_by     Int
-  createdAt  DateTime @default(now()) @db.Timestamp(0)
-  updatedAt  DateTime @updatedAt @db.Timestamp(0)
-}
-
-
-model Expenses {
-  id         Int      @id @default(autoincrement())
-  admin_id   Int  
-  expense_title   String 
-  expense_description    String     @db.Text @default("")
-  amount    Float    @default(0)
-  added_by     Int
-  createdAt  DateTime @default(now()) @db.Timestamp(0)
-  updatedAt  DateTime @updatedAt @db.Timestamp(0)
-}
-
 model RizwanCars {
   id         Int      @id @default(autoincrement())
   balance    Float   @default(0)
@@ -286,8 +282,7 @@ model RizwanCars {
 
 model Expenses {
   id         Int      @id @default(autoincrement())
-  admin_id   Int 
-  role       String  @default("")
+  user_id   Int 
   expense_title   String 
   expense_description    String     @db.Text @default("")
   amount    Float    @default(0)
@@ -295,3 +290,27 @@ model Expenses {
   createdAt  DateTime @default(now()) @db.Timestamp(0)
   updatedAt  DateTime @updatedAt @db.Timestamp(0)
 }
+
+
+model BankAccounts {
+  id            Int      @id @default(autoincrement()) // Auto-incrementing primary key
+  bank_title    String // Title of the bank
+  account_title String // Title of the account (e.g., Savings, Checking)
+  account_no    String // Account number (you can add @unique if the account numbers must be unique)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt // Automatically updates when the record is updated
+}
+
+
+model PaymentRequests {
+  id            Int      @id @default(autoincrement())
+  userid        Int
+  transactionno String   @unique
+  img_url       String   @db.Text
+  status        String
+  verified_by   String?
+  amount        Float
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+}
+

@@ -16,17 +16,35 @@ import {
 import { Add as PlusIcon, Delete as TrashIcon, Close as CloseIcon } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 
+async function getCurrencies() {
+  try {
+    const response = await fetch(
+      `https://v6.exchangerate-api.com/v6/${process.env.NEXT_PUBLIC_EXCHANGE_RATE_API_KEY}/pair/JPY/USD`
+    );
+    if (!response.ok) {
+      throw new Error("Failed to fetch currency data");
+    }
+    const data = await response.json();
+    console.log("Currency pair data:", data);
+    return data;
+  } catch (error) {
+    console.error("Error fetching currencies:", error);
+    return null;
+  }
+}
+
 export default function NewBookingForm() {
   const [seaPorts, setSeaPorts] = useState([]);
   const [distributors, setDistributors] = useState([]);
+  const [exchangeRate, setExchangeRate] = useState(null);
   const [invoiceData, setInvoiceData] = useState({
     date: "",
     number: "",
-    amount: "",
     status: "UNPAID",
     auctionHouse: "",
     imagePath: "",
-    amountYen: "",
+    amountYen: 0,
+    amount_doller: 0,
     added_by: "",
     vehicles: [],
   });
@@ -69,8 +87,75 @@ export default function NewBookingForm() {
       }
     };
 
-    Promise.all([fetchSeaPorts(), fetchDistributors()]).finally(() => setLoading(false));
+    const fetchExchangeRate = async () => {
+      const currencyData = await getCurrencies();
+      if (currencyData && currencyData.conversion_rate) {
+        setExchangeRate(currencyData.conversion_rate);
+      } else {
+        setError("Failed to fetch exchange rate");
+      }
+    };
+
+    Promise.all([fetchSeaPorts(), fetchDistributors(), fetchExchangeRate()]).finally(() =>
+      setLoading(false)
+    );
   }, []);
+
+  useEffect(() => {
+    if (exchangeRate && invoiceData.amountYen > 0) {
+      const convertedPrice = invoiceData.amountYen * exchangeRate;
+      setInvoiceData((prev) => ({
+        ...prev,
+        amount_doller: parseFloat(convertedPrice.toFixed(2)),
+      }));
+    } else {
+      setInvoiceData((prev) => ({ ...prev, amount_doller: 0 }));
+    }
+  }, [invoiceData.amountYen, exchangeRate]);
+
+  useEffect(() => {
+    const updatedVehicles = invoiceData.vehicles.map((vehicle) => {
+      const bidAmount = parseFloat(vehicle.bidAmount) || 0;
+      const tenPercentAdd = bidAmount * 0.1;
+      const recycleAmount = parseFloat(vehicle.recycleAmount) || 0;
+      const commissionAmount = parseFloat(vehicle.commissionAmount) || 0;
+      const numberPlateTax = parseFloat(vehicle.numberPlateTax) || 0;
+      const repairCharges = parseFloat(vehicle.repairCharges) || 0;
+      const additionalAmount = parseFloat(vehicle.additionalAmount) || 0;
+
+      const totalAmount_yen =
+        bidAmount +
+        tenPercentAdd +
+        recycleAmount +
+        commissionAmount +
+        numberPlateTax +
+        repairCharges +
+        additionalAmount;
+
+      const totalAmount_dollers = exchangeRate
+        ? parseFloat((totalAmount_yen * exchangeRate).toFixed(2))
+        : 0;
+
+      return {
+        ...vehicle,
+        tenPercentAdd: parseFloat(tenPercentAdd.toFixed(2)),
+        totalAmount_yen: parseFloat(totalAmount_yen.toFixed(2)),
+        totalAmount_dollers,
+      };
+    });
+
+    setInvoiceData((prev) => ({ ...prev, vehicles: updatedVehicles }));
+  }, [
+    invoiceData.vehicles.map((v) => [
+      v.bidAmount,
+      v.recycleAmount,
+      v.commissionAmount,
+      v.numberPlateTax,
+      v.repairCharges,
+      v.additionalAmount,
+    ]),
+    exchangeRate,
+  ]);
 
   const handleInputChange = (field, value) => {
     setInvoiceData((prev) => ({ ...prev, [field]: value }));
@@ -89,26 +174,26 @@ export default function NewBookingForm() {
           invoiceNo: "",
           chassisNo: "",
           maker: "",
-          year: "",
+          year: "", // Initialize as string
           color: "",
           engineType: "",
-          tenPercentAdd: "",
-          recycleAmount: "",
-          auctionFee: "",
-          auctionFeeAmount: "",
-          bidAmount: "",
-          commissionAmount: "",
-          numberPlateTax: "",
-          repairCharges: "",
-          totalAmount: "",
+          tenPercentAdd: 0,
+          recycleAmount: 0,
+          auction_house: "",
+          bidAmount: 0,
+          commissionAmount: 0,
+          numberPlateTax: 0,
+          repairCharges: 0,
+          totalAmount_yen: 0,
+          totalAmount_dollers: 0,
           sendingPort: "",
-          additionalAmount: "",
+          additionalAmount: 0,
           isDocumentRequired: "",
           documentReceiveDate: "",
           isOwnership: "",
           ownershipDate: "",
           status: "Pending",
-          distributor_id: 1,
+          distributor_id: "",
           vehicleImages: [],
           added_by: userid || "",
         },
@@ -132,7 +217,8 @@ export default function NewBookingForm() {
         typeof file === "string" ? file : URL.createObjectURL(file)
       );
     } else {
-      updatedVehicles[index][field] = value;
+      // Ensure year is always a string
+      updatedVehicles[index][field] = field === "year" ? String(value) : value;
     }
     setInvoiceData((prev) => ({ ...prev, vehicles: updatedVehicles }));
   };
@@ -177,15 +263,15 @@ export default function NewBookingForm() {
     try {
       setSubmitting(true);
       let jsonPayload = { ...invoiceData };
-
+  
       if (!jsonPayload.number || jsonPayload.number === "") throw new Error("Invoice number is required.");
       jsonPayload.number = parseInt(jsonPayload.number, 10);
       if (isNaN(jsonPayload.number)) throw new Error("Invoice number must be a valid integer.");
-
-      jsonPayload.amount = parseFloat(jsonPayload.amount) || 0;
+  
       jsonPayload.amountYen = parseFloat(jsonPayload.amountYen) || 0;
+      jsonPayload.amount_doller = parseFloat(jsonPayload.amount_doller) || 0;
       jsonPayload.added_by = parseInt(userid);
-
+  
       if (invoiceData.imagePath && invoiceData.imagePath.length > 0) {
         const base64Image = await convertToBase64(invoiceData.imagePath[0]);
         const imageUrl = await uploadImageToServer(base64Image);
@@ -193,31 +279,40 @@ export default function NewBookingForm() {
       } else {
         jsonPayload.imagePath = "";
       }
-
+  
       const updatedVehicles = await Promise.all(
         invoiceData.vehicles.map(async (vehicle, index) => {
           let updatedVehicle = { ...vehicle };
           delete updatedVehicle.vehicleImagePreviews;
-
+  
           const numericFields = [
-            "year",
             "tenPercentAdd",
             "recycleAmount",
-            "auctionFee",
-            "auctionFeeAmount",
             "bidAmount",
             "commissionAmount",
             "numberPlateTax",
             "repairCharges",
-            "totalAmount",
+            "totalAmount_yen",
+            "totalAmount_dollers",
+            "additionalAmount",
           ];
           numericFields.forEach((field) => {
             updatedVehicle[field] = parseFloat(updatedVehicle[field]) || 0;
           });
-
-          updatedVehicle.distributor_id = parseInt(vehicle.distributor_id, 10) || 1;
+  
+          updatedVehicle.year = String(vehicle.year || "");
+          updatedVehicle.sendingPort = parseInt(vehicle.sendingPort, 10);
+          updatedVehicle.distributor_id = parseInt(vehicle.distributor_id, 10);
+  
+          if (isNaN(updatedVehicle.sendingPort)) {
+            throw new Error(`Sending port ID is required for vehicle ${vehicle.chassisNo || index + 1}`);
+          }
+          if (isNaN(updatedVehicle.distributor_id)) {
+            updatedVehicle.distributor_id = 1;
+          }
+  
           updatedVehicle.added_by = parseInt(userid);
-
+  
           if (vehicle.vehicleImages && vehicle.vehicleImages.length > 0) {
             const imageUrls = await Promise.all(
               vehicle.vehicleImages.map(async (file) => {
@@ -229,38 +324,38 @@ export default function NewBookingForm() {
           } else {
             updatedVehicle.vehicleImages = [];
           }
-
+  
           return updatedVehicle;
         })
       );
-
-      jsonPayload.vehicles = updatedVehicles.filter((vehicle) => vehicle !== null);
-
+  
+      jsonPayload.vehicles = updatedVehicles;
+  
       console.log("JSON Payload to be sent:", JSON.stringify(jsonPayload, null, 2));
-
+  
       const response = await fetch("/api/admin/invoice-management", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(jsonPayload),
       });
-
+  
       const textResponse = await response.text();
       console.log("Raw API response:", textResponse);
-
+  
       if (!response.ok) throw new Error(`Server Error: ${response.status} - ${textResponse}`);
-
+  
       const jsonResponse = JSON.parse(textResponse);
       console.log("Parsed JSON response:", jsonResponse);
-
+  
       alert("Invoice added successfully!");
       setInvoiceData({
         date: "",
         number: "",
-        amount: "",
         status: "UNPAID",
         auctionHouse: "",
         imagePath: "",
-        amountYen: "",
+        amountYen: 0,
+        amount_doller: 0,
         added_by: userid || "",
         vehicles: [],
       });
@@ -272,7 +367,7 @@ export default function NewBookingForm() {
       setSubmitting(false);
     }
   };
-
+  
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
@@ -300,7 +395,6 @@ export default function NewBookingForm() {
         New Invoice
       </Typography>
 
-      {/* Invoice Details */}
       <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
           Invoice Details
@@ -316,6 +410,7 @@ export default function NewBookingForm() {
             fullWidth
           />
           <TextField
+            type="number"
             label="Invoice Number"
             variant="outlined"
             value={invoiceData.number}
@@ -325,19 +420,20 @@ export default function NewBookingForm() {
           />
           <TextField
             type="number"
-            label="Invoice Amount"
-            variant="outlined"
-            value={invoiceData.amount}
-            onChange={(e) => handleInputChange("amount", e.target.value)}
-            fullWidth
-          />
-          <TextField
-            type="number"
-            label="Invoice Amount (Yen)"
+            label="Amount (Yen)"
             variant="outlined"
             value={invoiceData.amountYen}
             onChange={(e) => handleInputChange("amountYen", e.target.value)}
             fullWidth
+          />
+          <TextField
+            type="number"
+            label="Amount (Dollar)"
+            variant="outlined"
+            value={invoiceData.amount_doller}
+            InputProps={{ readOnly: true }}
+            fullWidth
+            disabled
           />
           <FormControl variant="outlined" fullWidth>
             <InputLabel>Status</InputLabel>
@@ -379,7 +475,6 @@ export default function NewBookingForm() {
         </Box>
       </Paper>
 
-      {/* Vehicle Details */}
       <Paper elevation={3} sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>
           Vehicle Details
@@ -418,7 +513,7 @@ export default function NewBookingForm() {
                 fullWidth
               />
               <TextField
-                type="number"
+                type="text" // Changed to text to ensure string input
                 label="Year"
                 variant="outlined"
                 value={vehicle.year}
@@ -439,19 +534,27 @@ export default function NewBookingForm() {
                 onChange={(e) => handleVehicleChange(index, "engineType", e.target.value)}
                 fullWidth
               />
+              <TextField
+                label="Auction House"
+                variant="outlined"
+                value={vehicle.auction_house}
+                onChange={(e) => handleVehicleChange(index, "auction_house", e.target.value)}
+                fullWidth
+              />
               <FormControl variant="outlined" fullWidth>
                 <InputLabel>Sending Port</InputLabel>
                 <Select
                   value={vehicle.sendingPort}
                   onChange={(e) => handleVehicleChange(index, "sendingPort", e.target.value)}
                   label="Sending Port"
+                  required
                 >
                   <MenuItem value="">
                     <em>Select Sending Port</em>
                   </MenuItem>
                   {seaPorts.map((port) => (
-                    <MenuItem key={port.id} value={port.title}>
-                      {port.title}
+                    <MenuItem key={port.id} value={port.id}>
+                      {port.name}
                     </MenuItem>
                   ))}
                 </Select>
@@ -463,7 +566,7 @@ export default function NewBookingForm() {
                   onChange={(e) => handleVehicleChange(index, "distributor_id", e.target.value)}
                   label="Distributor"
                 >
-                  <MenuItem value={1}>
+                  <MenuItem value="">
                     <em>Select Distributor</em>
                   </MenuItem>
                   {distributors.map((dist) => (
@@ -486,8 +589,9 @@ export default function NewBookingForm() {
                 label="10% Add"
                 variant="outlined"
                 value={vehicle.tenPercentAdd}
-                onChange={(e) => handleVehicleChange(index, "tenPercentAdd", e.target.value)}
+                InputProps={{ readOnly: true }}
                 fullWidth
+                disabled
               />
               <TextField
                 type="number"
@@ -495,14 +599,6 @@ export default function NewBookingForm() {
                 variant="outlined"
                 value={vehicle.recycleAmount}
                 onChange={(e) => handleVehicleChange(index, "recycleAmount", e.target.value)}
-                fullWidth
-              />
-              <TextField
-                type="number"
-                label="Auction Fee"
-                variant="outlined"
-                value={vehicle.auctionFee}
-                onChange={(e) => handleVehicleChange(index, "auctionFee", e.target.value)}
                 fullWidth
               />
               <TextField
@@ -531,18 +627,29 @@ export default function NewBookingForm() {
               />
               <TextField
                 type="number"
-                label="Total Amount"
-                variant="outlined"
-                value={vehicle.totalAmount}
-                onChange={(e) => handleVehicleChange(index, "totalAmount", e.target.value)}
-                fullWidth
-              />
-              <TextField
                 label="Additional Amount"
                 variant="outlined"
                 value={vehicle.additionalAmount}
                 onChange={(e) => handleVehicleChange(index, "additionalAmount", e.target.value)}
                 fullWidth
+              />
+              <TextField
+                type="number"
+                label="Total Amount (Yen)"
+                variant="outlined"
+                value={vehicle.totalAmount_yen}
+                InputProps={{ readOnly: true }}
+                fullWidth
+                disabled
+              />
+              <TextField
+                type="number"
+                label="Total Amount (Dollar)"
+                variant="outlined"
+                value={vehicle.totalAmount_dollers}
+                InputProps={{ readOnly: true }}
+                fullWidth
+                disabled
               />
               <FormControl variant="outlined" fullWidth>
                 <InputLabel>Document Required</InputLabel>
@@ -597,10 +704,10 @@ export default function NewBookingForm() {
                   onChange={(e) => handleVehicleChange(index, "status", e.target.value)}
                   label="Status"
                 >
-                  <MenuItem value="">
-                    <em>Select Status</em>
-                  </MenuItem>
                   <MenuItem value="Pending">Pending</MenuItem>
+                  <MenuItem value="Approved">Approved</MenuItem>
+                  <MenuItem value="Shipped">Shipped</MenuItem>
+                  <MenuItem value="Delivered">Delivered</MenuItem>
                 </Select>
               </FormControl>
               <TextField

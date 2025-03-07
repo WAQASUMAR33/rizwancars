@@ -40,6 +40,7 @@ const LoginModal = ({ isOpen, onClose, role }) => {
       }
   }, [userrole]);
 
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     const { username, password } = formData;

@@ -2,17 +2,16 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/utils/prisma';
 
+// app/api/admin/transport-management/route.js
+
 export async function POST(request) {
   try {
     const data = await request.json();
-    console.log('Received data:', data); // Log incoming data for debugging
+    console.log("Received data:", JSON.stringify(data, null, 2));
 
     const {
       date,
-      deliveryDate,
-      port,
       company,
-      fee,
       imagePath,
       added_by,
       createdAt,
@@ -21,75 +20,87 @@ export async function POST(request) {
     } = data;
 
     // Validation for required fields
-    if (!date || !deliveryDate || !port || !company || !vehicles || !added_by || vehicles.length === 0) {
+    if (!date || !company || !vehicles || !added_by || vehicles.length === 0) {
       return NextResponse.json(
-        { error: 'Missing required fields', status: false },
+        { error: "Missing required fields", status: false },
         { status: 400 }
       );
     }
 
+    // Validate vehicle data
+    vehicles.forEach((vehicle, index) => {
+      if (!vehicle.vehicleNo || !vehicle.amount || vehicle.amount_doller === undefined) {
+        throw new Error(
+          `Missing required vehicle fields at index ${index}: vehicleNo, amount, or amount_doller`
+        );
+      }
+      if (!vehicle.id) {
+        console.warn(`Vehicle at index ${index} missing id; AddVehicle status update will be skipped`);
+      }
+    });
+
     // Prepare an array of Prisma operations
     const operations = [];
 
-    // Add create operations for each Transport record
-    vehicles.forEach(vehicle => {
+    // Add create operations for each Inspection record
+    vehicles.forEach((vehicle) => {
       operations.push(
-        prisma.transport.create({
+        prisma.inspection.create({
           data: {
-            date: new Date(date),
-            deliveryDate: new Date(deliveryDate),
-            port,
+            vehicleNo: vehicle.vehicleNo,
             company,
-            added_by,
-            fee: parseFloat(vehicle.fee),
+            date: new Date(date),
+            amount: parseFloat(vehicle.amount),
+            amount_doller: parseFloat(vehicle.amount_doller),
             imagePath: imagePath || "",
-            vehicleNo: vehicle.chassisNo,
+            added_by: parseInt(added_by),
             createdAt: new Date(createdAt),
             updatedAt: new Date(updatedAt),
           },
         })
       );
-      // Add update operation for each AddVehicle status
-      operations.push(
-        prisma.addVehicle.update({
-          where: { id: vehicle.id },
-          data: {
-            status: "Transport",
-            updatedAt: new Date(),
-          },
-        })
-      );
+      // Add update operation for each AddVehicle status if id exists
+      if (vehicle.id) {
+        operations.push(
+          prisma.addVehicle.update({
+            where: { id: parseInt(vehicle.id) },
+            data: {
+              status: "Inspection",
+              updatedAt: new Date(),
+            },
+          })
+        );
+      }
     });
 
+    console.log("Operations to execute:", operations.length); // Log number of operations
     // Execute all operations in a single transaction
     const results = await prisma.$transaction(operations);
 
-    // Filter out only the Transport records from the results
-    const createdTransports = results.filter(result => result.hasOwnProperty('port')); // Transport records have 'port'
+    // Filter out only the Inspection records from the results
+    const createdInspections = results.filter((result) => result.hasOwnProperty("vehicleNo"));
 
-    console.log('Created transports:', createdTransports); // Debug log
+    console.log("Created inspections:", JSON.stringify(createdInspections, null, 2));
     return NextResponse.json(
       {
-        message: 'Transports created successfully and vehicle statuses updated',
+        message: "Inspections created successfully and vehicle statuses updated",
         status: true,
-        data: createdTransports,
+        data: createdInspections,
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error('Error creating transports:', error);
     return NextResponse.json(
       {
-        error: 'Internal server error',
+        error: "Internal server error",
         status: false,
-        details: error.message || 'Unknown error occurred',
+        details: error.message || "Unknown error occurred",
       },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
+
 
 
 export async function GET(request) {

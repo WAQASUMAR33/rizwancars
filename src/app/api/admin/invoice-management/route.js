@@ -49,15 +49,6 @@ import prisma from '../../../../utils/prisma';
 //   }
 // }
 
-// Adjust path as per your project structure
-
-
-// app/api/admin/invoice-management/NewInvoice/route.js
-
-// ✅ POST: Create a new invoice with vehicles and images
-// ✅ POST: Create a new invoice with vehicles and images (accepts JSON with image paths)
-
-
 
 
 export async function POST(request) {
@@ -92,11 +83,11 @@ export async function POST(request) {
       const invoiceData = {
         date: new Date(body.date),
         number: parseInt(body.number, 10),
-        amount: parseFloat(body.amount) || 0,
-        status: body.status || 'UNPAID', // Updated to match InvoiceStatus enum
+        status: body.status || "UNPAID",
         auctionHouse: body.auctionHouse || "",
         imagePath: body.imagePath || "",
         amountYen: parseFloat(body.amountYen) || 0,
+        amount_doller: parseFloat(body.amount_doller) || 0,
         added_by: parseInt(body.added_by),
       };
       const invoice = await tx.invoice.create({ data: invoiceData });
@@ -107,20 +98,20 @@ export async function POST(request) {
         invoiceNo: vehicle.invoiceNo || invoice.number.toString(),
         chassisNo: vehicle.chassisNo || "",
         maker: vehicle.maker || "",
-        year: parseInt(vehicle.year, 10) || 0,
+        year: vehicle.year || "",
         color: vehicle.color || "",
         engineType: vehicle.engineType || "",
         tenPercentAdd: parseFloat(vehicle.tenPercentAdd) || 0,
         recycleAmount: parseFloat(vehicle.recycleAmount) || 0,
-        auctionFee: parseFloat(vehicle.auctionFee) || 0,
-        auctionFeeAmount: parseFloat(vehicle.auctionFeeAmount) || 0,
+        auction_house: vehicle.auction_house || "",
         bidAmount: parseFloat(vehicle.bidAmount) || 0,
         commissionAmount: parseFloat(vehicle.commissionAmount) || 0,
         numberPlateTax: parseFloat(vehicle.numberPlateTax) || 0,
         repairCharges: parseFloat(vehicle.repairCharges) || 0,
-        totalAmount: parseFloat(vehicle.totalAmount) || 0,
-        sendingPort: vehicle.sendingPort || "",
-        additionalAmount: vehicle.additionalAmount || "",
+        totalAmount_yen: parseFloat(vehicle.totalAmount_yen) || 0,
+        totalAmount_dollers: parseFloat(vehicle.totalAmount_dollers) || 0,
+        sendingPort: parseInt(vehicle.sendingPort, 10),
+        additionalAmount: parseFloat(vehicle.additionalAmount) || 0,
         isDocumentRequired: vehicle.isDocumentRequired || "no",
         documentReceiveDate: vehicle.documentReceiveDate ? new Date(vehicle.documentReceiveDate) : null,
         isOwnership: vehicle.isOwnership || "no",
@@ -130,9 +121,18 @@ export async function POST(request) {
         added_by: parseInt(body.added_by),
       }));
 
+      // Validate required vehicle fields
+      vehicleDataList.forEach((vehicle, index) => {
+        if (!vehicle.sendingPort || isNaN(vehicle.sendingPort)) {
+          throw new Error(`Missing or invalid required field: sendingPort for vehicle at index ${index}`);
+        }
+      });
+
       const createdVehicles = await Promise.all(
         vehicleDataList.map(async (data, index) => {
           const vehicle = await tx.addVehicle.create({ data });
+          console.log(`Vehicle ${index} created:`, vehicle);
+
           const vehicleImages = body.vehicles[index]?.vehicleImages || [];
           if (vehicleImages.length > 0) {
             await tx.vehicleImage.createMany({
@@ -142,38 +142,41 @@ export async function POST(request) {
               })),
               skipDuplicates: true,
             });
+            console.log(`Vehicle ${index} images created:`, vehicleImages);
           }
           return vehicle;
         })
       );
 
       // Payment logic for PAID status
-      if (body.status === 'PAID') { // Changed from amountStatus to status
+      if (body.status === "PAID") {
         const lastTransaction = await tx.transactions.findFirst({
           where: { admin_id: parseInt(body.added_by) },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
         });
+        console.log("Last transaction:", lastTransaction);
 
         const currentBalance = lastTransaction ? lastTransaction.balance : 0;
-        const invoiceAmount = parseFloat(body.amount) || 0;
+        const invoiceAmount = parseFloat(body.amount_doller) || 0;
         const newBalance = currentBalance - invoiceAmount;
 
         if (newBalance < 0) {
-          throw new Error('Insufficient admin balance for this transaction');
+          throw new Error("Insufficient admin balance for this transaction");
         }
 
-        await tx.transactions.create({
+        const transaction = await tx.transactions.create({
           data: {
             admin_id: parseInt(body.added_by),
             distributor_id: createdVehicles.length > 0 ? parseInt(createdVehicles[0].distributor_id) : 1,
-            amountin: 0,
-            amountout: invoiceAmount,
+            amountin: invoiceAmount,
+            amountout: 0,
             preBalance: currentBalance,
             balance: newBalance,
             details: `Payment for Invoice #${invoice.number}`,
             added_by: parseInt(body.added_by),
           },
         });
+        console.log("Transaction created:", transaction);
       }
 
       return { invoice, vehicles: createdVehicles };
@@ -181,13 +184,16 @@ export async function POST(request) {
 
     console.log("Transaction completed, data saved:", JSON.stringify(result, null, 2));
 
-    return NextResponse.json({
-      message: "Invoice and vehicles created successfully",
-      status: true,
-      data: result,
-    }, { status: 200 });
+    return NextResponse.json(
+      {
+        message: "Invoice and vehicles created successfully",
+        status: true,
+        data: result,
+      },
+      { status: 200 }
+    );
   } catch (error) {
-    if (error.code === 'P2002' && error.meta?.target?.includes('number')) {
+    if (error.code === "P2002" && error.meta?.target?.includes("number")) {
       return NextResponse.json(
         {
           message: "An invoice with this number already exists",
@@ -206,11 +212,9 @@ export async function POST(request) {
       },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
+  // Removed finally block with prisma.$disconnect()
 }
-    
 
 // ✅ GET: Fetch all Invoices with Associated Vehicles and Vehicle Images
 export async function GET() {

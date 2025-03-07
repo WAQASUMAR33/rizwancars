@@ -100,7 +100,7 @@ export default function SeaPortManagement() {
   useEffect(() => {
     setFilteredSeaPorts(
       seaPorts.filter((port) =>
-        port.title.toLowerCase().includes(searchTerm.toLowerCase())
+        port.name.toLowerCase().includes(searchTerm.toLowerCase())
       )
     );
   }, [seaPorts, searchTerm]);
@@ -187,7 +187,8 @@ export default function SeaPortManagement() {
               <TableHead>
                 <TableRow>
                   <TableCell>No.</TableCell>
-                  <TableCell>Sea Port Title</TableCell>
+                  <TableCell>Sea Port Name</TableCell>
+                  <TableCell>Location</TableCell>
                   <TableCell>Created At</TableCell>
                   <TableCell>Updated At</TableCell>
                   <TableCell>Actions</TableCell>
@@ -197,7 +198,8 @@ export default function SeaPortManagement() {
                 {filteredSeaPorts.map((port, index) => (
                   <TableRow key={port.id} hover>
                     <TableCell>{index + 1}</TableCell>
-                    <TableCell>{port.title}</TableCell>
+                    <TableCell>{port.name}</TableCell>
+                    <TableCell>{port.location || "N/A"}</TableCell>
                     <TableCell>{new Date(port.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell>{new Date(port.updatedAt).toLocaleDateString()}</TableCell>
                     <TableCell>
@@ -224,18 +226,25 @@ export default function SeaPortManagement() {
         )}
 
         <Dialog open={isModalOpen} onClose={() => setIsModalOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>
-            {currentPort ? "Update Sea Port" : "Add Sea Port"}
-          </DialogTitle>
+          <DialogTitle>{currentPort ? "Update Sea Port" : "Add Sea Port"}</DialogTitle>
           <DialogContent>
             <form onSubmit={handleSubmit}>
               <Box mb={2} mt={1}>
                 <TextField
-                  label="Sea Port Title"
-                  name="title"
-                  defaultValue={currentPort?.title}
+                  label="Sea Port Name"
+                  name="name"
+                  defaultValue={currentPort?.name}
                   variant="outlined"
                   required
+                  fullWidth
+                />
+              </Box>
+              <Box mb={2}>
+                <TextField
+                  label="Location"
+                  name="location"
+                  defaultValue={currentPort?.location}
+                  variant="outlined"
                   fullWidth
                 />
               </Box>
