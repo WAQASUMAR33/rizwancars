@@ -13,7 +13,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useSelector } from 'react-redux';
 
 const fetchPaymentRequests = async () => {
-  const response = await fetch('/api/admin/payment-request');
+  const response = await fetch('/api/admin/payment-requests'); // Updated to match your GET API endpoint
   if (!response.ok) {
     throw new Error('Failed to fetch payment requests');
   }
@@ -24,7 +24,7 @@ export default function PaymentRequestManagement() {
   const [paymentRequests, setPaymentRequests] = useState([]);
   const [filteredPaymentRequests, setFilteredPaymentRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadingAction,setloadingAction]= useState('')
+  const [loadingAction, setLoadingAction] = useState('');
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [paymentImage, setPaymentImage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,7 +32,7 @@ export default function PaymentRequestManagement() {
   const [date2, setDate2] = useState('');
   const [dialogMode, setDialogMode] = useState(null); // 'view', 'add', 'edit'
   const [formData, setFormData] = useState({
-    userid: '',
+    admin_id: '', // Changed from userid to admin_id
     transactionno: '',
     amount: '',
     img_url: '',
@@ -51,11 +51,11 @@ export default function PaymentRequestManagement() {
       setFilteredPaymentRequests(paymentRequests);
       return;
     }
-    console.log("The query is : ",query)
+    console.log("The query is : ", query);
 
     const filtered = paymentRequests.filter((req) =>
-      req.transactionno?.toLowerCase().includes(query.toLowerCase())||
-      req.Users?.name.toLowerCase().includes(query.toLowerCase()) ||
+      req.transactionno?.toLowerCase().includes(query.toLowerCase()) ||
+      req.Admin?.fullname?.toLowerCase().includes(query.toLowerCase()) || // Changed from Users.name to Admin.fullname
       req.status.toLowerCase().includes(query.toLowerCase())
     );
     setFilteredPaymentRequests(filtered);
@@ -70,8 +70,6 @@ export default function PaymentRequestManagement() {
       .catch((err) => toast.error(err.message))
       .finally(() => setIsLoading(false));
   }, []);
-
-  
 
   const handleInputChange = (e) => {
     const { name, value, files } = e.target;
@@ -95,7 +93,7 @@ export default function PaymentRequestManagement() {
   };
 
   const handleApprove = async () => {
-    setloadingAction('approve')
+    setLoadingAction('approve');
     try {
       const payload = {
         ...selectedRequest,
@@ -103,7 +101,7 @@ export default function PaymentRequestManagement() {
         verified_by: username,
       };
 
-      const response = await fetch(`/api/admin/payment-request/approve/${selectedRequest.id}`, {
+      const response = await fetch(`/api/admin/payment-requests/approve/${selectedRequest.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -118,26 +116,26 @@ export default function PaymentRequestManagement() {
         // Optimistically update the payment request status in the state
         setPaymentRequests((prev) =>
           prev.map((req) =>
-            req.id === selectedRequest.id ? { ...req, status: 'Approved' } : req
+            req.id === selectedRequest.id ? { ...req, status: 'Approved', verified_by: username } : req
           )
         );
-        setloadingAction('')
+        setLoadingAction('');
       } else {
         toast.error(result.message || 'Failed to approve payment request.');
-        setloadingAction('')
+        setLoadingAction('');
       }
     } catch (err) {
       toast.error(`Error: ${err.message}`);
-      setloadingAction('')
+      setLoadingAction('');
     }
   };
 
   const handleReject = async () => {
-    setloadingAction('reject')
+    setLoadingAction('reject');
     try {
       const payload = { ...selectedRequest, status: 'Rejected', verified_by: username };
       const response = await fetch(
-        `/api/admin/payment-request/reject/${selectedRequest.id}`,
+        `/api/admin/payment-requests/reject/${selectedRequest.id}`, // Updated endpoint
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -153,22 +151,21 @@ export default function PaymentRequestManagement() {
       // Optimistically update the payment request status in the state
       setPaymentRequests((prev) =>
         prev.map((req) =>
-          req.id === selectedRequest.id ? { ...req, status: 'Rejected' } : req
+          req.id === selectedRequest.id ? { ...req, status: 'Rejected', verified_by: username } : req
         )
       );
-      setloadingAction('')
+      setLoadingAction('');
     } catch (err) {
       toast.error(err.message);
-      setloadingAction('')
+      setLoadingAction('');
     }
-    setloadingAction('')
   };
 
   const handleAction = async () => {
     try {
       const payload = { ...formData, verified_by: username };
       const response = await fetch(
-        `/api/admin/payment-request/${dialogMode === 'edit' ? formData.id : ''}`,
+        `/api/admin/payment-requests${dialogMode === 'edit' ? `/${formData.id}` : ''}`, // Updated endpoint
         {
           method: dialogMode === 'add' ? 'POST' : 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -181,7 +178,7 @@ export default function PaymentRequestManagement() {
         `Payment request ${dialogMode === 'add' ? 'added' : 'updated'} successfully!`
       );
       setDialogMode(null);
-      setFormData({ userid: '', transactionno: '', amount: '', img_url: '', status: 'Pending' });
+      setFormData({ admin_id: '', transactionno: '', amount: '', img_url: '', status: 'Pending' });
 
       // Optimistically update the payment request in the state
       if (dialogMode === 'edit') {
@@ -200,7 +197,7 @@ export default function PaymentRequestManagement() {
 
   const handleDelete = async (id) => {
     try {
-      const response = await fetch(`/api/admin/payment-request/${id}`, {
+      const response = await fetch(`/api/admin/payment-requests/${id}`, { // Updated endpoint
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('Failed to delete payment request');
@@ -254,26 +251,26 @@ export default function PaymentRequestManagement() {
             onChange={(e) => handleSearch(e)}
             className="pl-10 w-auto"
           />
-           <div className="flex space-x-4  justify-end  items-center mr-4">
-              <input
-                type="date"
-                value={date1}
-                onChange={(e) => setDate1(e.target.value)}
-                className="border border-gray-300 rounded-lg px-4 py-2"
-              />
-              <input
-                type="date"
-                value={date2}
-                onChange={(e) => setDate2(e.target.value)}
-                className="border border-gray-300 rounded-lg px-4 py-2"
-              />
-              <button
-                onClick={filterByDate}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-              >
-                Filter
-              </button>
-            </div>
+          <div className="flex space-x-4 justify-end items-center mr-4">
+            <input
+              type="date"
+              value={date1}
+              onChange={(e) => setDate1(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2"
+            />
+            <input
+              type="date"
+              value={date2}
+              onChange={(e) => setDate2(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2"
+            />
+            <button
+              onClick={filterByDate}
+              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+            >
+              Filter
+            </button>
+          </div>
         </div>
         {isLoading ? (
           <div className="flex justify-center">
@@ -285,8 +282,8 @@ export default function PaymentRequestManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>No.</TableHead>
-                  <TableHead>UserId</TableHead>
-                  <TableHead>User</TableHead>
+                  <TableHead>Admin ID</TableHead> {/* Changed from UserId */}
+                  <TableHead>Admin</TableHead> {/* Changed from User */}
                   <TableHead>Image</TableHead>
                   <TableHead>Transaction No</TableHead>
                   <TableHead>Amount</TableHead>
@@ -298,10 +295,9 @@ export default function PaymentRequestManagement() {
                 {filteredPaymentRequests.map((req, index) => (
                   <TableRow key={req.id}>
                     <TableCell>{index + 1}</TableCell>
-                    <TableCell>{req.userid}</TableCell>
-                    <TableCell>{req.Users?.name}</TableCell>
+                    <TableCell>{req.admin_id}</TableCell> {/* Changed from userid */}
+                    <TableCell>{req.Admin?.fullname || 'Unknown'}</TableCell> {/* Changed from Users.name */}
                     <TableCell>
-
                       {req.img_url ? (
                         <img
                           src={`${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_PATH}/${req.img_url}`}
@@ -337,7 +333,6 @@ export default function PaymentRequestManagement() {
                       >
                         <TrashIcon className="h-4 w-4" />
                       </Button> */}
-
                     </TableCell>
                   </TableRow>
                 ))}
@@ -361,7 +356,7 @@ export default function PaymentRequestManagement() {
               <div className='flex w-full'>
                 <div className="w-1/2 space-y-4">
                   <div>
-                    <strong>UserId:</strong> {selectedRequest.userid}
+                    <strong>Admin ID:</strong> {selectedRequest.admin_id} {/* Changed from UserId */}
                   </div>
                   <div>
                     <strong>Transaction No:</strong> {selectedRequest.transactionno}
@@ -385,15 +380,16 @@ export default function PaymentRequestManagement() {
                 {selectedRequest.status !== 'Approved' && (
                   <div className='flex justify-between w-full'>
                     <div className='space-x-4'>
-                      <Button onClick={handleApprove}> {loadingAction==='approve'? <Loader className='animate-spin'/>:'Approve'}</Button>
+                      <Button onClick={handleApprove}>
+                        {loadingAction === 'approve' ? <Loader className='animate-spin' /> : 'Approve'}
+                      </Button>
                       <Button onClick={handleReject} className="bg-red-600">
-                      {loadingAction==='reject'? <Loader className='animate-spin'/>:'Reject'}
+                        {loadingAction === 'reject' ? <Loader className='animate-spin' /> : 'Reject'}
                       </Button>
                     </div>
                     <div>
                       <Button
                         onClick={() => handleDownloadImage(selectedRequest)}
-
                         className="text-green-600 bg-white hover:bg-gray-100 border-green-600 border"
                       >
                         Download Image
@@ -407,9 +403,9 @@ export default function PaymentRequestManagement() {
           {dialogMode === 'add' || dialogMode === 'edit' ? (
             <div className="space-y-4">
               <Input
-                label="UserId"
-                name="userid"
-                value={formData.userid}
+                label="Admin ID" // Changed from UserId
+                name="admin_id" // Changed from userid
+                value={formData.admin_id}
                 onChange={handleInputChange}
               />
               <Input

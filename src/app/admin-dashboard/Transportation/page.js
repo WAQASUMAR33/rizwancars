@@ -19,7 +19,7 @@ import {
   Box,
   Typography,
 } from "@mui/material";
-import { Close as CloseIcon } from "@mui/icons-material";
+import { Close as CloseIcon, Download as DownloadIcon } from "@mui/icons-material";
 
 const TransportList = () => {
   const [transports, setTransports] = useState([]);
@@ -76,6 +76,22 @@ const TransportList = () => {
     currentPage * itemsPerPage
   );
 
+  const handleDownloadImage = (imageUrl, fileName) => {
+    fetch(imageUrl)
+      .then((response) => response.blob())
+      .then((blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName || "transport-image.jpg";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      })
+      .catch((err) => console.error("Error downloading image:", err));
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="64vh">
@@ -121,14 +137,14 @@ const TransportList = () => {
 
       <TableContainer component={Paper}>
         <Table>
-          <TableHead>
+          <TableHead sx={{ backgroundColor: "#F5F5F5" }}> {/* White smoke color */}
             <TableRow>
               <TableCell>#</TableCell>
               <TableCell>Date</TableCell>
               <TableCell>Delivery Date</TableCell>
               <TableCell>Port</TableCell>
               <TableCell>Company</TableCell>
-              <TableCell>Fee</TableCell>
+              <TableCell>Total Amount (Yen)</TableCell>
               <TableCell>Vehicle No</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
@@ -142,7 +158,7 @@ const TransportList = () => {
                   <TableCell>{new Date(transport.deliveryDate).toLocaleDateString()}</TableCell>
                   <TableCell>{transport.port}</TableCell>
                   <TableCell>{transport.company}</TableCell>
-                  <TableCell>{(transport.fee ? Number(transport.fee) : 0).toFixed(2)}</TableCell>
+                  <TableCell>{transport.totalamount.toFixed(2)}</TableCell>
                   <TableCell>{transport.vehicleNo}</TableCell>
                   <TableCell>
                     <Button
@@ -202,7 +218,7 @@ const TransportList = () => {
         fullWidth
         PaperProps={{ sx: { maxHeight: "85vh" } }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ backgroundColor: "#F5F5F5" }}> {/* White smoke color */}
           Transport Details
           <IconButton
             aria-label="close"
@@ -238,20 +254,54 @@ const TransportList = () => {
                   <Typography variant="body1">{selectedTransport.company}</Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
-                  <Typography variant="caption" color="textSecondary">Fee</Typography>
-                  <Typography variant="body1">{(selectedTransport.fee ? Number(selectedTransport.fee) : 0).toFixed(2)}</Typography>
+                  <Typography variant="caption" color="textSecondary">Amount (Yen)</Typography>
+                  <Typography variant="body1">{selectedTransport.amount.toFixed(2)}</Typography>
+                </Paper>
+                <Paper elevation={1} sx={{ p: 2 }}>
+                  <Typography variant="caption" color="textSecondary">10% Add (Yen)</Typography>
+                  <Typography variant="body1">{selectedTransport.tenPercentAdd.toFixed(2)}</Typography>
+                </Paper>
+                <Paper elevation={1} sx={{ p: 2 }}>
+                  <Typography variant="caption" color="textSecondary">Total Amount (Yen)</Typography>
+                  <Typography variant="body1">{selectedTransport.totalamount.toFixed(2)}</Typography>
+                </Paper>
+                <Paper elevation={1} sx={{ p: 2 }}>
+                  <Typography variant="caption" color="textSecondary">Total Dollars (USD)</Typography>
+                  <Typography variant="body1">{selectedTransport.totaldollers.toFixed(2)}</Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Vehicle No</Typography>
                   <Typography variant="body1">{selectedTransport.vehicleNo}</Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
-                  <Typography variant="caption" color="textSecondary">Image Path</Typography>
-                  <Typography variant="body1">{selectedTransport.imagePath || "N/A"}</Typography>
+                  <Typography variant="caption" color="textSecondary">Image</Typography>
+                  {selectedTransport.imagePath ? (
+                    <Box>
+                      <img
+                        src={selectedTransport.imagePath}
+                        alt="Transport Receipt"
+                        style={{ maxWidth: "200px", maxHeight: "200px", objectFit: "contain", borderRadius: "4px" }}
+                      />
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        startIcon={<DownloadIcon />}
+                        onClick={() => handleDownloadImage(selectedTransport.imagePath, `transport_${selectedTransport.id}.jpg`)}
+                        sx={{ mt: 1 }}
+                      >
+                        Download
+                      </Button>
+                    </Box>
+                  ) : (
+                    <Typography variant="body1">N/A</Typography>
+                  )}
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Added By</Typography>
-                  <Typography variant="body1">{selectedTransport.added_by}</Typography>
+                  <Typography variant="body1">
+                    {selectedTransport.Admin ? `${selectedTransport.Admin.fullname} (${selectedTransport.Admin.username})` : "N/A"}
+                  </Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Created At</Typography>
@@ -276,10 +326,6 @@ const TransportList = () => {
                           <Typography variant="body1">{vehicle.id}</Typography>
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="textSecondary">Invoice No</Typography>
-                          <Typography variant="body1">{vehicle.invoiceNo}</Typography>
-                        </Box>
-                        <Box>
                           <Typography variant="caption" color="textSecondary">Chassis No</Typography>
                           <Typography variant="body1">{vehicle.chassisNo}</Typography>
                         </Box>
@@ -292,36 +338,12 @@ const TransportList = () => {
                           <Typography variant="body1">{vehicle.year}</Typography>
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="textSecondary">Color</Typography>
-                          <Typography variant="body1">{vehicle.color}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Engine Type</Typography>
-                          <Typography variant="body1">{vehicle.engineType}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Total Amount</Typography>
-                          <Typography variant="body1">{(vehicle.totalAmount ? Number(vehicle.totalAmount) : 0).toFixed(2)}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Sending Port</Typography>
-                          <Typography variant="body1">{vehicle.sendingPort}</Typography>
-                        </Box>
-                        <Box>
                           <Typography variant="caption" color="textSecondary">Status</Typography>
                           <Typography variant="body1">{vehicle.status}</Typography>
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="textSecondary">Added By</Typography>
-                          <Typography variant="body1">{vehicle.added_by}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Created At</Typography>
-                          <Typography variant="body1">{new Date(vehicle.createdAt).toLocaleString()}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Updated At</Typography>
-                          <Typography variant="body1">{new Date(vehicle.updatedAt).toLocaleString()}</Typography>
+                          <Typography variant="caption" color="textSecondary">Admin ID</Typography>
+                          <Typography variant="body1">{vehicle.admin_id}</Typography>
                         </Box>
                       </Box>
                     </Paper>

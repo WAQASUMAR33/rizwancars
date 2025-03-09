@@ -26,7 +26,7 @@ async function getExchangeRate() {
     return data.conversion_rate || 0.0067; // Fallback rate if API fails
   } catch (error) {
     console.error("Error fetching exchange rate:", error);
-    return 0.0067; // Default fallback rate (approx JPY to USD as of recent data)
+    return 0.0067; // Default fallback rate (approx JPY to USD)
   }
 }
 
@@ -37,27 +37,29 @@ export default function TransportBookingForm() {
   const [exchangeRate, setExchangeRate] = useState(0);
 
   const [transportData, setTransportData] = useState({
-    date: "",
-    deliveryDate: "",
-    port: "",
-    company: "",
-    receiptImage: null,
-    added_by: null,
-    vehicles: [],
+    date: "",           // Matches `date: DateTime`
+    deliveryDate: "",   // Matches `deliveryDate: DateTime`
+    port: "",           // Matches `port: String`
+    company: "",        // Matches `company: String`
+    receiptImage: null, // Used to generate `imagePath: String`
+    admin_id: null,     // Matches `admin_id: Int`
+    vehicles: [],       // Used to generate `vehicleNo: String` and `vehicles` array for API
   });
-  const [totalAmountYen, setTotalAmountYen] = useState(0);
-  const [totalAmountDollars, setTotalAmountDollars] = useState(0);
+  const [totalAmountYen, setTotalAmountYen] = useState(0);   // Maps to `amount: Float`
+  const [tenPercentAdd, setTenPercentAdd] = useState(0);     // Maps to `tenPercentAdd: Float`
+  const [totalAmount, setTotalAmount] = useState(0);         // Maps to `totalamount: Float`
+  const [totalDollars, setTotalDollars] = useState(0);       // Maps to `totaldollers: Float`
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
 
   const username = useSelector((state) => state.user.username);
-  const userid = useSelector((state) => state.user.id);
+  const adminId = useSelector((state) => state.user.id);
 
   useEffect(() => {
-    setTransportData((prev) => ({ ...prev, added_by: userid }));
-  }, [userid]);
+    setTransportData((prev) => ({ ...prev, admin_id: adminId }));
+  }, [adminId]);
 
   useEffect(() => {
     const fetchSeaPortsAndRate = async () => {
@@ -80,10 +82,15 @@ export default function TransportBookingForm() {
 
   useEffect(() => {
     const totalYen = transportData.vehicles.reduce((sum, vehicle) => 
-      sum + (parseFloat(vehicle.fee) || 0), 0);
-    const totalDollars = totalYen * exchangeRate;
-    setTotalAmountYen(totalYen);
-    setTotalAmountDollars(totalDollars);
+      sum + (parseFloat(vehicle.amount) || 0), 0);
+    const tenPercent = totalYen * 0.1;
+    const totalWithTenPercent = totalYen + tenPercent;
+    const totalInDollars = totalWithTenPercent * exchangeRate;
+
+    setTotalAmountYen(totalYen);       // For `amount`
+    setTenPercentAdd(tenPercent);      // For `tenPercentAdd`
+    setTotalAmount(totalWithTenPercent); // For `totalamount`
+    setTotalDollars(totalInDollars);   // For `totaldollers`
   }, [transportData.vehicles, exchangeRate]);
 
   const searchVehicle = async () => {
@@ -124,8 +131,10 @@ export default function TransportBookingForm() {
             vehicles: [...prev.vehicles, {
               id: fullVehicle.id,
               chassisNo: fullVehicle.chassisNo,
-              fee: "", // Yen input
-              fee_doller: 0, // Calculated Dollars
+              amount: "",
+              tenPercentAdd: 0,
+              totalamount: 0,
+              totaldollers: 0,
             }],
           }));
           setVehicles([]);
@@ -143,9 +152,11 @@ export default function TransportBookingForm() {
     const updatedVehicles = [...transportData.vehicles];
     updatedVehicles[index][field] = value;
 
-    if (field === "fee") {
-      const feeYen = parseFloat(value) || 0;
-      updatedVehicles[index].fee_doller = feeYen * exchangeRate;
+    if (field === "amount") {
+      const amountYen = parseFloat(value) || 0;
+      updatedVehicles[index].tenPercentAdd = amountYen * 0.1;
+      updatedVehicles[index].totalamount = amountYen + updatedVehicles[index].tenPercentAdd;
+      updatedVehicles[index].totaldollers = updatedVehicles[index].totalamount * exchangeRate;
     }
 
     setTransportData((prev) => ({ ...prev, vehicles: updatedVehicles }));
@@ -192,46 +203,59 @@ export default function TransportBookingForm() {
   const handleSubmit = async () => {
     try {
       setSubmitting(true);
-  
+
       let imagePath = "";
       if (transportData.receiptImage) {
         const base64Image = await convertToBase64(transportData.receiptImage[0]);
         imagePath = await uploadImageToServer(base64Image);
         if (!imagePath) throw new Error("Failed to upload receipt image");
       }
-  
+
       const payload = {
-        date: transportData.date,
-        deliveryDate: transportData.deliveryDate,
-        port: transportData.port,
-        company: transportData.company,
-        fee: totalAmountYen,
-        fee_doller: totalAmountDollars,
-        imagePath: imagePath || "",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        added_by: transportData.added_by,
-        vehicles: transportData.vehicles.map((v) => ({
-          id: v.id, // Include id for AddVehicle update
+        date: transportData.date,              // Maps to `date: DateTime`
+        deliveryDate: transportData.deliveryDate, // Maps to `deliveryDate: DateTime`
+        port: transportData.port,              // Maps to `port: String`
+        company: transportData.company,        // Maps to `company: String`
+        amount: totalAmountYen,                // Maps to `amount: Float`
+        tenPercentAdd: tenPercentAdd,          // Maps to `tenPercentAdd: Float`
+        totalamount: totalAmount,              // Maps to `totalamount: Float`
+        totaldollers: totalDollars,            // Maps to `totaldollers: Float`
+        imagePath: imagePath || "",            // Maps to `imagePath: String`
+        vehicleNo: transportData.vehicles.map(v => v.chassisNo).join(", "), // Maps to `vehicleNo: String`
+        admin_id: transportData.admin_id,      // Maps to `admin_id: Int`
+        createdAt: new Date().toISOString(),   // Maps to `createdAt: DateTime`
+        updatedAt: new Date().toISOString(),   // Maps to `updatedAt: DateTime`
+        vehicles: transportData.vehicles.map(v => ({
+          id: v.id,
           vehicleNo: v.chassisNo,
-          fee: parseFloat(v.fee) || 0,
-          fee_doller: parseFloat(v.fee_doller) || 0,
-        })),
+          amount: parseFloat(v.amount) || 0,
+          totaldollers: parseFloat(v.totaldollers) || 0,
+        })), // Extra data for updating `AddVehicle` statuses
       };
-  
+
       console.log("Data to be submitted:", JSON.stringify(payload, null, 2));
-  
+
       const response = await fetch("/api/admin/transport-management", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-  
+
+      // Log raw response for debugging
+      const responseText = await response.text();
+      console.log("Response status:", response.status);
+      console.log("Response text:", responseText);
+
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData;
+        try {
+          errorData = responseText ? JSON.parse(responseText) : { message: "No response body" };
+        } catch (e) {
+          throw new Error(`Failed to parse server response: ${responseText || "Empty response"}`);
+        }
         throw new Error(errorData.message || "Failed to submit transport data");
       }
-  
+
       alert("Transport data submitted successfully!");
       setTransportData({
         date: "",
@@ -239,7 +263,7 @@ export default function TransportBookingForm() {
         port: "",
         company: "",
         receiptImage: null,
-        added_by: userid,
+        admin_id: adminId,
         vehicles: [],
       });
       setImagePreview(null);
@@ -385,30 +409,47 @@ export default function TransportBookingForm() {
           </Typography>
         ) : (
           <Box>
-            <Box display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr" gap={2} sx={{ fontWeight: "bold", mb: 1 }}>
+            <Box display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr" gap={2} sx={{ fontWeight: "bold", mb: 1 }}>
               <Typography variant="body1">Vehicle ID</Typography>
               <Typography variant="body1">Chassis No</Typography>
               <Typography variant="body1">Amount (Yen)</Typography>
-              <Typography variant="body1">Amount (USD)</Typography>
-              <Typography variant="body1">Actions</Typography>
+              <Typography variant="body1">10% Add (Yen)</Typography>
+              <Typography variant="body1">Total (Yen)</Typography>
+              <Typography variant="body1">Total (USD)</Typography>
             </Box>
             {transportData.vehicles.map((vehicle, index) => (
-              <Box key={index} display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr" gap={2} alignItems="center" mb={1}>
+              <Box key={index} display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr" gap={2} alignItems="center" mb={1}>
                 <Typography variant="body1">{vehicle.id}</Typography>
                 <Typography variant="body1">{vehicle.chassisNo}</Typography>
                 <TextField
                   type="number"
                   label="Amount (Yen)"
                   variant="outlined"
-                  value={vehicle.fee}
-                  onChange={(e) => updateVehicleTransport(index, "fee", e.target.value)}
+                  value={vehicle.amount}
+                  onChange={(e) => updateVehicleTransport(index, "amount", e.target.value)}
                   fullWidth
                 />
                 <TextField
                   type="number"
-                  label="Amount (USD)"
+                  label="10% Add (Yen)"
                   variant="outlined"
-                  value={(vehicle.fee_doller || 0).toFixed(2)}
+                  value={(vehicle.tenPercentAdd || 0).toFixed(2)}
+                  InputProps={{ readOnly: true }}
+                  fullWidth
+                />
+                <TextField
+                  type="number"
+                  label="Total (Yen)"
+                  variant="outlined"
+                  value={(vehicle.totalamount || 0).toFixed(2)}
+                  InputProps={{ readOnly: true }}
+                  fullWidth
+                />
+                <TextField
+                  type="number"
+                  label="Total (USD)"
+                  variant="outlined"
+                  value={(vehicle.totaldollers || 0).toFixed(2)}
                   InputProps={{ readOnly: true }}
                   fullWidth
                 />
@@ -427,7 +468,13 @@ export default function TransportBookingForm() {
                 Total Amount (Yen): {totalAmountYen.toFixed(2)}
               </Typography>
               <Typography variant="body1" sx={{ fontWeight: "bold" }}>
-                Total Amount (USD): {totalAmountDollars.toFixed(2)}
+                10% Add (Yen): {tenPercentAdd.toFixed(2)}
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: "bold" }}>
+                Grand Total (Yen): {totalAmount.toFixed(2)}
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: "bold" }}>
+                Grand Total (USD): {totalDollars.toFixed(2)}
               </Typography>
             </Box>
           </Box>
@@ -445,4 +492,4 @@ export default function TransportBookingForm() {
       </Button>
     </Box>
   );
-};
+}

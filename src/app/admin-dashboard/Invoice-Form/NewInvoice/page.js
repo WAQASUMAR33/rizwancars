@@ -35,8 +35,8 @@ async function getCurrencies() {
 
 export default function NewBookingForm() {
   const [seaPorts, setSeaPorts] = useState([]);
-  const [distributors, setDistributors] = useState([]);
-  const [exchangeRate, setExchangeRate] = useState(null);
+  const [admins, setAdmins] = useState([]);
+  const [exchangeRate, setExchangeRate] = useState(null); // JPY to USD rate
   const [invoiceData, setInvoiceData] = useState({
     date: "",
     number: "",
@@ -56,10 +56,12 @@ export default function NewBookingForm() {
   const [error, setError] = useState("");
   const [invoiceImagePreview, setInvoiceImagePreview] = useState(null);
 
+  // Set added_by once on mount or when userid changes
   useEffect(() => {
     setInvoiceData((prev) => ({ ...prev, added_by: userid || "" }));
   }, [userid]);
 
+  // Fetch initial data once on mount
   useEffect(() => {
     const fetchSeaPorts = async () => {
       try {
@@ -74,49 +76,42 @@ export default function NewBookingForm() {
       }
     };
 
-    const fetchDistributors = async () => {
+    const fetchAdmins = async () => {
       try {
-        const response = await fetch("/api/admin/distributers");
-        if (!response.ok) throw new Error(`Failed to fetch distributors: ${response.statusText}`);
+        const response = await fetch("/api/admin/adminuser");
+        if (!response.ok) throw new Error(`Failed to fetch admins: ${response.statusText}`);
         const result = await response.json();
-        setDistributors(result || []);
+        setAdmins(Array.isArray(result) ? result : result.data || []);
       } catch (error) {
-        console.error("Error fetching distributors:", error);
+        console.error("Error fetching admins:", error);
         setError(error.message);
-        setDistributors([]);
+        setAdmins([]);
       }
     };
 
     const fetchExchangeRate = async () => {
       const currencyData = await getCurrencies();
       if (currencyData && currencyData.conversion_rate) {
-        setExchangeRate(currencyData.conversion_rate);
+        setExchangeRate(currencyData.conversion_rate); // JPY to USD rate
       } else {
         setError("Failed to fetch exchange rate");
       }
     };
 
-    Promise.all([fetchSeaPorts(), fetchDistributors(), fetchExchangeRate()]).finally(() =>
+    Promise.all([fetchSeaPorts(), fetchAdmins(), fetchExchangeRate()]).finally(() =>
       setLoading(false)
     );
   }, []);
 
+  // Update vehicle totals when vehicle data or exchangeRate changes
   useEffect(() => {
-    if (exchangeRate && invoiceData.amountYen > 0) {
-      const convertedPrice = invoiceData.amountYen * exchangeRate;
-      setInvoiceData((prev) => ({
-        ...prev,
-        amount_doller: parseFloat(convertedPrice.toFixed(2)),
-      }));
-    } else {
-      setInvoiceData((prev) => ({ ...prev, amount_doller: 0 }));
-    }
-  }, [invoiceData.amountYen, exchangeRate]);
+    if (!exchangeRate) return;
 
-  useEffect(() => {
     const updatedVehicles = invoiceData.vehicles.map((vehicle) => {
+      const auction_amount = parseFloat(vehicle.auction_amount) || 0;
       const bidAmount = parseFloat(vehicle.bidAmount) || 0;
-      const tenPercentAdd = bidAmount * 0.1;
+      const tenPercentAdd = auction_amount * 0.1;
+      const bidAmount10per = bidAmount * 0.1;
       const recycleAmount = parseFloat(vehicle.recycleAmount) || 0;
       const commissionAmount = parseFloat(vehicle.commissionAmount) || 0;
       const numberPlateTax = parseFloat(vehicle.numberPlateTax) || 0;
@@ -124,45 +119,62 @@ export default function NewBookingForm() {
       const additionalAmount = parseFloat(vehicle.additionalAmount) || 0;
 
       const totalAmount_yen =
-        bidAmount +
+        auction_amount +
         tenPercentAdd +
+        bidAmount +
+        bidAmount10per +
         recycleAmount +
         commissionAmount +
         numberPlateTax +
         repairCharges +
         additionalAmount;
 
-      const totalAmount_dollers = exchangeRate
-        ? parseFloat((totalAmount_yen * exchangeRate).toFixed(2))
-        : 0;
+      const totalAmount_dollers = totalAmount_yen * exchangeRate;
 
       return {
         ...vehicle,
         tenPercentAdd: parseFloat(tenPercentAdd.toFixed(2)),
+        bidAmount10per: parseFloat(bidAmount10per.toFixed(2)),
         totalAmount_yen: parseFloat(totalAmount_yen.toFixed(2)),
-        totalAmount_dollers,
+        totalAmount_dollers: parseFloat(totalAmount_dollers.toFixed(2)),
       };
     });
 
-    setInvoiceData((prev) => ({ ...prev, vehicles: updatedVehicles }));
-  }, [
-    invoiceData.vehicles.map((v) => [
-      v.bidAmount,
-      v.recycleAmount,
-      v.commissionAmount,
-      v.numberPlateTax,
-      v.repairCharges,
-      v.additionalAmount,
-    ]),
-    exchangeRate,
-  ]);
+    setInvoiceData((prev) => ({
+      ...prev,
+      vehicles: updatedVehicles,
+    }));
+  }, [invoiceData.vehicles, exchangeRate]);
+
+  // Update invoice amount_doller when amountYen or exchangeRate changes
+  useEffect(() => {
+    if (!exchangeRate || !invoiceData.amountYen) return;
+
+    const amountYen = parseFloat(invoiceData.amountYen) || 0;
+    const amountDoller = amountYen * exchangeRate;
+
+    setInvoiceData((prev) => ({
+      ...prev,
+      amount_doller: parseFloat(amountDoller.toFixed(2)),
+    }));
+  }, [invoiceData.amountYen, exchangeRate]);
 
   const handleInputChange = (field, value) => {
-    setInvoiceData((prev) => ({ ...prev, [field]: value }));
-    if (field === "imagePath" && value) {
-      const file = value[0];
-      setInvoiceImagePreview(file ? URL.createObjectURL(file) : null);
-    }
+    setInvoiceData((prev) => {
+      const updatedData = { ...prev, [field]: value };
+      if (field === "amountYen") {
+        updatedData.amountYen = parseFloat(value) || 0;
+      } else if (field === "amount_doller") {
+        updatedData.amount_doller = parseFloat(value) || 0;
+        if (exchangeRate) {
+          updatedData.amountYen = parseFloat((updatedData.amount_doller / exchangeRate).toFixed(2));
+        }
+      } else if (field === "imagePath" && value) {
+        const file = value[0];
+        setInvoiceImagePreview(file ? URL.createObjectURL(file) : null);
+      }
+      return updatedData;
+    });
   };
 
   const addVehicle = () => {
@@ -171,30 +183,32 @@ export default function NewBookingForm() {
       vehicles: [
         ...prev.vehicles,
         {
-          invoiceNo: "",
           chassisNo: "",
           maker: "",
-          year: "", // Initialize as string
+          year: "",
           color: "",
           engineType: "",
+          auction_amount: 0,
           tenPercentAdd: 0,
+          bidAmount: 0,
+          bidAmount10per: 0,
           recycleAmount: 0,
           auction_house: "",
-          bidAmount: 0,
           commissionAmount: 0,
           numberPlateTax: 0,
           repairCharges: 0,
           totalAmount_yen: 0,
           totalAmount_dollers: 0,
-          sendingPort: "",
+          sendingPort: null,
           additionalAmount: 0,
           isDocumentRequired: "",
-          documentReceiveDate: "",
+          documentReceiveDate: null,
           isOwnership: "",
-          ownershipDate: "",
+          ownershipDate: null,
           status: "Pending",
-          distributor_id: "",
+          admin_id: null,
           vehicleImages: [],
+          vehicleImagePreviews: [],
           added_by: userid || "",
         },
       ],
@@ -217,8 +231,20 @@ export default function NewBookingForm() {
         typeof file === "string" ? file : URL.createObjectURL(file)
       );
     } else {
-      // Ensure year is always a string
       updatedVehicles[index][field] = field === "year" ? String(value) : value;
+      if (
+        [
+          "auction_amount",
+          "bidAmount",
+          "recycleAmount",
+          "commissionAmount",
+          "numberPlateTax",
+          "repairCharges",
+          "additionalAmount",
+        ].includes(field)
+      ) {
+        updatedVehicles[index][field] = parseFloat(value) || 0;
+      }
     }
     setInvoiceData((prev) => ({ ...prev, vehicles: updatedVehicles }));
   };
@@ -227,9 +253,9 @@ export default function NewBookingForm() {
     setInvoiceData((prev) => {
       const updatedVehicles = [...prev.vehicles];
       updatedVehicles[vehicleIndex].vehicleImages.splice(imageIndex, 1);
-      if (updatedVehicles[vehicleIndex].vehicleImagePreviews) {
-        updatedVehicles[vehicleIndex].vehicleImagePreviews.splice(imageIndex, 1);
-      }
+      updatedVehicles[vehicleIndex].vehicleImagePreviews = updatedVehicles[vehicleIndex].vehicleImages.map((file) =>
+        typeof file === "string" ? file : URL.createObjectURL(file)
+      );
       return { ...prev, vehicles: updatedVehicles };
     });
   };
@@ -263,15 +289,15 @@ export default function NewBookingForm() {
     try {
       setSubmitting(true);
       let jsonPayload = { ...invoiceData };
-  
+
       if (!jsonPayload.number || jsonPayload.number === "") throw new Error("Invoice number is required.");
       jsonPayload.number = parseInt(jsonPayload.number, 10);
       if (isNaN(jsonPayload.number)) throw new Error("Invoice number must be a valid integer.");
-  
+
       jsonPayload.amountYen = parseFloat(jsonPayload.amountYen) || 0;
       jsonPayload.amount_doller = parseFloat(jsonPayload.amount_doller) || 0;
       jsonPayload.added_by = parseInt(userid);
-  
+
       if (invoiceData.imagePath && invoiceData.imagePath.length > 0) {
         const base64Image = await convertToBase64(invoiceData.imagePath[0]);
         const imageUrl = await uploadImageToServer(base64Image);
@@ -279,16 +305,18 @@ export default function NewBookingForm() {
       } else {
         jsonPayload.imagePath = "";
       }
-  
+
       const updatedVehicles = await Promise.all(
         invoiceData.vehicles.map(async (vehicle, index) => {
           let updatedVehicle = { ...vehicle };
           delete updatedVehicle.vehicleImagePreviews;
-  
+
           const numericFields = [
+            "auction_amount",
             "tenPercentAdd",
-            "recycleAmount",
             "bidAmount",
+            "bidAmount10per",
+            "recycleAmount",
             "commissionAmount",
             "numberPlateTax",
             "repairCharges",
@@ -299,20 +327,23 @@ export default function NewBookingForm() {
           numericFields.forEach((field) => {
             updatedVehicle[field] = parseFloat(updatedVehicle[field]) || 0;
           });
-  
+
           updatedVehicle.year = String(vehicle.year || "");
-          updatedVehicle.sendingPort = parseInt(vehicle.sendingPort, 10);
-          updatedVehicle.distributor_id = parseInt(vehicle.distributor_id, 10);
-  
-          if (isNaN(updatedVehicle.sendingPort)) {
-            throw new Error(`Sending port ID is required for vehicle ${vehicle.chassisNo || index + 1}`);
-          }
-          if (isNaN(updatedVehicle.distributor_id)) {
-            updatedVehicle.distributor_id = 1;
-          }
-  
+          updatedVehicle.sendingPort = vehicle.sendingPort ? parseInt(vehicle.sendingPort, 10) : null;
+          updatedVehicle.admin_id = vehicle.admin_id ? parseInt(vehicle.admin_id, 10) : null;
           updatedVehicle.added_by = parseInt(userid);
-  
+
+          if (!updatedVehicle.admin_id) {
+            throw new Error(`Admin ID is required for vehicle ${vehicle.chassisNo || index + 1}`);
+          }
+
+          if (vehicle.documentReceiveDate) {
+            updatedVehicle.documentReceiveDate = new Date(vehicle.documentReceiveDate).toISOString();
+          }
+          if (vehicle.ownershipDate) {
+            updatedVehicle.ownershipDate = new Date(vehicle.ownershipDate).toISOString();
+          }
+
           if (vehicle.vehicleImages && vehicle.vehicleImages.length > 0) {
             const imageUrls = await Promise.all(
               vehicle.vehicleImages.map(async (file) => {
@@ -324,30 +355,31 @@ export default function NewBookingForm() {
           } else {
             updatedVehicle.vehicleImages = [];
           }
-  
+
           return updatedVehicle;
         })
       );
-  
+
       jsonPayload.vehicles = updatedVehicles;
-  
+
       console.log("JSON Payload to be sent:", JSON.stringify(jsonPayload, null, 2));
-  
+
+      // Update the endpoint to match your API structure
       const response = await fetch("/api/admin/invoice-management", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(jsonPayload),
       });
-  
+
       const textResponse = await response.text();
       console.log("Raw API response:", textResponse);
-  
+
       if (!response.ok) throw new Error(`Server Error: ${response.status} - ${textResponse}`);
-  
+
       const jsonResponse = JSON.parse(textResponse);
       console.log("Parsed JSON response:", jsonResponse);
-  
-      alert("Invoice added successfully!");
+
+      // Clear form data on successful submission
       setInvoiceData({
         date: "",
         number: "",
@@ -360,6 +392,7 @@ export default function NewBookingForm() {
         vehicles: [],
       });
       setInvoiceImagePreview(null);
+      alert("Invoice and vehicles added successfully!");
     } catch (error) {
       console.error("Error submitting invoice:", error);
       alert(`Failed to submit invoice. Error: ${error.message}`);
@@ -367,14 +400,14 @@ export default function NewBookingForm() {
       setSubmitting(false);
     }
   };
-  
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
         <Box textAlign="center">
           <CircularProgress />
           <Typography variant="body1" sx={{ mt: 2 }}>
-            Loading sea ports and distributors...
+            Loading sea ports and admins...
           </Typography>
         </Box>
       </Box>
@@ -389,10 +422,11 @@ export default function NewBookingForm() {
     );
   }
 
+  // The rest of the JSX (UI) remains unchanged
   return (
     <Box sx={{ p: 2, bgcolor: "#f1f6f9" }}>
       <Typography variant="h4" gutterBottom>
-        New Invoice
+        New Vehicle Booking
       </Typography>
 
       <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
@@ -420,7 +454,7 @@ export default function NewBookingForm() {
           />
           <TextField
             type="number"
-            label="Amount (Yen)"
+            label="Total Amount (Yen)"
             variant="outlined"
             value={invoiceData.amountYen}
             onChange={(e) => handleInputChange("amountYen", e.target.value)}
@@ -428,12 +462,11 @@ export default function NewBookingForm() {
           />
           <TextField
             type="number"
-            label="Amount (Dollar)"
+            label="Total Amount (Dollar)"
             variant="outlined"
             value={invoiceData.amount_doller}
-            InputProps={{ readOnly: true }}
+            onChange={(e) => handleInputChange("amount_doller", e.target.value)}
             fullWidth
-            disabled
           />
           <FormControl variant="outlined" fullWidth>
             <InputLabel>Status</InputLabel>
@@ -453,7 +486,7 @@ export default function NewBookingForm() {
             onChange={(e) => handleInputChange("auctionHouse", e.target.value)}
             fullWidth
           />
-          <Box gridColumn="span 2">
+          <Box gridColumn="span 1">
             <TextField
               type="file"
               variant="outlined"
@@ -490,14 +523,7 @@ export default function NewBookingForm() {
         </Button>
         {invoiceData.vehicles.map((vehicle, index) => (
           <Paper key={index} elevation={1} sx={{ p: 2, mb: 2, bgcolor: "#f5f5f5" }}>
-            <Box display="grid" gridTemplateColumns="repeat(5, 1fr)" gap={2}>
-              <TextField
-                label="Invoice No"
-                variant="outlined"
-                value={vehicle.invoiceNo}
-                onChange={(e) => handleVehicleChange(index, "invoiceNo", e.target.value)}
-                fullWidth
-              />
+            <Box display="grid" gridTemplateColumns="repeat(6, 1fr)" gap={2}>
               <TextField
                 label="Chassis No"
                 variant="outlined"
@@ -513,7 +539,7 @@ export default function NewBookingForm() {
                 fullWidth
               />
               <TextField
-                type="text" // Changed to text to ensure string input
+                type="text"
                 label="Year"
                 variant="outlined"
                 value={vehicle.year}
@@ -544,10 +570,9 @@ export default function NewBookingForm() {
               <FormControl variant="outlined" fullWidth>
                 <InputLabel>Sending Port</InputLabel>
                 <Select
-                  value={vehicle.sendingPort}
+                  value={vehicle.sendingPort || ""}
                   onChange={(e) => handleVehicleChange(index, "sendingPort", e.target.value)}
                   label="Sending Port"
-                  required
                 >
                   <MenuItem value="">
                     <em>Select Sending Port</em>
@@ -559,23 +584,39 @@ export default function NewBookingForm() {
                   ))}
                 </Select>
               </FormControl>
-              <FormControl variant="outlined" fullWidth>
-                <InputLabel>Distributor</InputLabel>
+              <FormControl variant="outlined" fullWidth required>
+                <InputLabel>Admin</InputLabel>
                 <Select
-                  value={vehicle.distributor_id}
-                  onChange={(e) => handleVehicleChange(index, "distributor_id", e.target.value)}
-                  label="Distributor"
+                  value={vehicle.admin_id || ""}
+                  onChange={(e) => handleVehicleChange(index, "admin_id", e.target.value)}
+                  label="Admin"
                 >
                   <MenuItem value="">
-                    <em>Select Distributor</em>
+                    <em>Select Admin</em>
                   </MenuItem>
-                  {distributors.map((dist) => (
-                    <MenuItem key={dist.id} value={dist.id}>
-                      {dist.name}
+                  {admins.map((admin) => (
+                    <MenuItem key={admin.id} value={admin.id}>
+                      {admin.username} ({admin.fullname})
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
+              <TextField
+                type="number"
+                label="Auction Amount"
+                variant="outlined"
+                value={vehicle.auction_amount}
+                onChange={(e) => handleVehicleChange(index, "auction_amount", e.target.value)}
+                fullWidth
+              />
+              <TextField
+                type="number"
+                label="Ten Percent Add"
+                variant="outlined"
+                value={vehicle.tenPercentAdd}
+                InputProps={{ readOnly: true }}
+                fullWidth
+              />
               <TextField
                 type="number"
                 label="Bid Amount"
@@ -586,12 +627,11 @@ export default function NewBookingForm() {
               />
               <TextField
                 type="number"
-                label="10% Add"
+                label="Bid Amount 10%"
                 variant="outlined"
-                value={vehicle.tenPercentAdd}
+                value={vehicle.bidAmount10per}
                 InputProps={{ readOnly: true }}
                 fullWidth
-                disabled
               />
               <TextField
                 type="number"
@@ -640,16 +680,14 @@ export default function NewBookingForm() {
                 value={vehicle.totalAmount_yen}
                 InputProps={{ readOnly: true }}
                 fullWidth
-                disabled
               />
               <TextField
                 type="number"
-                label="Total Amount (Dollar)"
+                label="Total Amount (Dollars)"
                 variant="outlined"
                 value={vehicle.totalAmount_dollers}
                 InputProps={{ readOnly: true }}
                 fullWidth
-                disabled
               />
               <FormControl variant="outlined" fullWidth>
                 <InputLabel>Document Required</InputLabel>
@@ -727,7 +765,7 @@ export default function NewBookingForm() {
                 Remove
               </Button>
             </Box>
-            {vehicle.vehicleImagePreviews && (
+            {vehicle.vehicleImagePreviews && vehicle.vehicleImagePreviews.length > 0 && (
               <Box mt={2} display="grid" gridTemplateColumns="repeat(8, 1fr)" gap={1}>
                 {vehicle.vehicleImagePreviews.map((src, imgIndex) => (
                   <Box key={imgIndex} position="relative" width={96} height={96}>

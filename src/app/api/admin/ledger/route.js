@@ -1,32 +1,14 @@
-import prisma from '@/utils/prisma';
+import prisma from '../../../../utils/prisma';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const ledgerEntries = await prisma.NewLedger.findMany({
+    const ledgerEntries = await prisma.ledger.findMany({
       include: {
-        Users: true,
-        HotelBooking: {
-          include: {
-            Hotel: true,
-            Hoteliers: true,
-          },
-        },
-        FlightBookings: true,
-        GroupFlightBookings: {
-          include: {
-            SingleGroupFlight: true,
-            FlightGroups: true,
-            FlightSector: true,
-            FlightAirline: true,
-            GroupPassengers: true,
-            Users: true,
-          },
-        },
-        PaymentRequests: true,
+        Admin: true, // Include related Admin data
       },
       orderBy: {
-        updated_at: 'desc',
+        updated_at: 'desc', // Sort by updated_at in descending order
       },
     });
 

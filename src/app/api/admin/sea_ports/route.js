@@ -6,21 +6,42 @@ import prisma from '../../../../utils/prisma';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, location } = body;
+    const { name, location, admin_id } = body;
 
-    // Validate required fields
+    // Validate required fields (matches Prisma model: name and admin_id are required)
     if (!name) {
       return NextResponse.json(
         { message: 'Missing required field: name', status: false },
         { status: 400 }
       );
     }
+    if (!admin_id) {
+      return NextResponse.json(
+        { message: 'Missing required field: admin_id', status: false },
+        { status: 400 }
+      );
+    }
 
-    // Create a new sea port in the database
+    // Verify admin exists (matches Prisma foreign key relation)
+    const adminExists = await prisma.admin.findUnique({
+      where: { id: parseInt(admin_id) },
+    });
+    if (!adminExists) {
+      return NextResponse.json(
+        { message: 'Invalid admin_id: Admin not found', status: false },
+        { status: 400 }
+      );
+    }
+
+    // Create a new sea port in the database (aligned with Prisma model)
     const newSeaPort = await prisma.seaPort.create({
       data: {
-        name,
-        location: location || "", // Optional field, default to empty string if not provided
+        name, // Required, matches model
+        location: location || "", // Optional, matches model with default ""
+        admin_id: parseInt(admin_id), // Required, matches model foreign key
+      },
+      include: {
+        admin: true, // Include admin data in response, matches relation
       },
     });
 
@@ -33,7 +54,7 @@ export async function POST(request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Error creating sea port:', error.message);
+   
     return NextResponse.json(
       {
         message: 'Failed to create sea port',
@@ -49,9 +70,10 @@ export async function POST(request) {
 export async function GET() {
   try {
     const seaPorts = await prisma.seaPort.findMany({
-      orderBy: { createdAt: 'desc' }, // Sort by creation date, newest first
+      orderBy: { createdAt: 'desc' }, // Matches model createdAt field
       include: {
-        vehicles: true, // Optionally include related vehicles
+        // vehicles: true, // Matches relation to AddVehicle
+        admin: true,    // Matches relation to Admin
       },
     });
 

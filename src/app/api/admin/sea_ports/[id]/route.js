@@ -1,22 +1,34 @@
-// app/api/admin/sea_ports/route.js
 import { NextResponse } from 'next/server';
 import prisma from '../../../../../utils/prisma';
 
-// POST: Create a new sea port (already provided, included for completeness)
+// POST: Create a new sea port
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { title } = body;
+    const { name, location, admin_id } = body;
 
-    if (!title) {
+    // Validate required fields
+    if (!name) {
       return NextResponse.json(
-        { message: 'Missing required field: title', status: false },
+        { message: 'Missing required field: name', status: false },
+        { status: 400 }
+      );
+    }
+
+    // Validate admin_id if provided (optional, defaults to 0)
+    if (admin_id && isNaN(parseInt(admin_id))) {
+      return NextResponse.json(
+        { message: 'Invalid admin_id: must be an integer', status: false },
         { status: 400 }
       );
     }
 
     const newSeaPort = await prisma.seaPort.create({
-      data: { title },
+      data: {
+        name,
+        location: location || '', // Optional, defaults to empty string
+        admin_id: admin_id ? parseInt(admin_id) : 0, // Optional, defaults to 0
+      },
     });
 
     return NextResponse.json(
@@ -36,6 +48,16 @@ export async function POST(request) {
 export async function GET() {
   try {
     const seaPorts = await prisma.seaPort.findMany({
+      include: {
+        admin: {
+          select: {
+            id: true,
+            fullname: true,
+            username: true,
+            role: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -58,12 +80,20 @@ export async function PUT(request) {
     const body = await request.json();
     console.log("Payload is:", body);
 
-    const { id, title } = body;
+    const { id, name, location, admin_id } = body;
 
     // Validate required fields
-    if (!id || !title) {
+    if (!id || !name) {
       return NextResponse.json(
-        { message: 'Missing required fields: id or title', status: false },
+        { message: 'Missing required fields: id or name', status: false },
+        { status: 400 }
+      );
+    }
+
+    // Validate admin_id if provided
+    if (admin_id && isNaN(parseInt(admin_id))) {
+      return NextResponse.json(
+        { message: 'Invalid admin_id: must be an integer', status: false },
         { status: 400 }
       );
     }
@@ -72,8 +102,9 @@ export async function PUT(request) {
     const updatedSeaPort = await prisma.seaPort.update({
       where: { id: parseInt(id, 10) }, // Ensure id is an integer
       data: {
-        title,
-        // updatedAt is handled automatically by @updatedAt
+        name,
+        location: location || '', // Optional, defaults to empty string if not provided
+        admin_id: admin_id ? parseInt(admin_id) : 0, // Update admin_id if provided, else keep existing or default to 0
       },
     });
 

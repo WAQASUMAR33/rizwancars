@@ -19,7 +19,7 @@ import {
   Box,
   Typography,
 } from "@mui/material";
-import { Close as CloseIcon } from "@mui/icons-material";
+import { Close as CloseIcon, OpenInNew as OpenInNewIcon, Download as DownloadIcon } from "@mui/icons-material";
 
 const CargoList = () => {
   const [cargoBookings, setCargoBookings] = useState([]);
@@ -30,24 +30,21 @@ const CargoList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
   const [selectedCargo, setSelectedCargo] = useState(null);
+  const [dialogLoading, setDialogLoading] = useState(false);
 
+  // Fetch all cargo bookings on mount
   useEffect(() => {
     const fetchCargoBookings = async () => {
       try {
         console.log("Fetching cargo bookings from API...");
         const response = await fetch("/api/admin/cargo");
-        console.log("Response status:", response.status);
-
         if (!response.ok) {
           throw new Error(`Failed to fetch cargo bookings: ${response.statusText}`);
         }
-
         const result = await response.json();
         console.log("API response:", result);
 
         const fetchedCargoBookings = result.data || [];
-        console.log("Fetched cargo bookings:", fetchedCargoBookings);
-
         setCargoBookings(fetchedCargoBookings);
         setFilteredCargoBookings(fetchedCargoBookings);
       } catch (err) {
@@ -61,6 +58,7 @@ const CargoList = () => {
     fetchCargoBookings();
   }, []);
 
+  // Filter cargo bookings based on search query
   useEffect(() => {
     const filtered = cargoBookings.filter((cargo) =>
       (cargo.bookingNo || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -69,6 +67,90 @@ const CargoList = () => {
     setFilteredCargoBookings(filtered);
     setCurrentPage(1);
   }, [searchQuery, cargoBookings]);
+
+  // Fetch detailed booking data when "View" is clicked
+  const fetchBookingDetails = async (id) => {
+    setDialogLoading(true);
+    try {
+      const response = await fetch(`/api/admin/cargo/${id}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch booking details: ${response.statusText}`);
+      }
+      const result = await response.json();
+      if (result.status) {
+        console.log("Fetched booking details:", result.data);
+        setSelectedCargo(result.data);
+      } else {
+        throw new Error(result.error || "Failed to load booking details");
+      }
+    } catch (err) {
+      console.error("Fetch details error:", err);
+      setError(err.message);
+    } finally {
+      setDialogLoading(false);
+    }
+  };
+
+  // Handle delete action
+  const handleDelete = async (id) => {
+    if (!confirm("Are you sure you want to delete this booking?")) return;
+
+    try {
+      const response = await fetch(`/api/admin/cargo/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to delete booking: ${response.statusText}`);
+      }
+      const result = await response.json();
+      if (result.status) {
+        setCargoBookings(cargoBookings.filter((cargo) => cargo.id !== id));
+        setFilteredCargoBookings(filteredCargoBookings.filter((cargo) => cargo.id !== id));
+        setSelectedCargo(null);
+        alert("Booking deleted successfully!");
+      } else {
+        throw new Error(result.error || "Deletion failed");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      setError(err.message);
+    }
+  };
+
+  // Handle update action (placeholder for now)
+  const handleUpdate = (cargo) => {
+    console.log("Update clicked for:", cargo);
+    alert("Update functionality to be implemented!");
+  };
+
+  // Handle image download
+  const handleDownloadImage = (imageUrl, fileName) => {
+    fetch(imageUrl)
+      .then((response) => response.blob())
+      .then((blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName || "image.jpg";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      })
+      .catch((err) => console.error("Download error:", err));
+  };
+
+  // Handle image load error
+  const handleImageError = (e, section) => {
+    console.error(`Image failed to load in ${section}:`, e.target.src);
+    e.target.style.display = "none"; // Hide broken image
+    e.target.nextSibling.style.display = "none"; // Hide open button
+    e.target.nextSibling.nextSibling.style.display = "none"; // Hide download button
+    e.target.parentElement.insertBefore(
+      document.createTextNode("Image not available"),
+      e.target.nextSibling
+    );
+  };
 
   const totalPages = Math.ceil(filteredCargoBookings.length / itemsPerPage);
   const paginatedCargoBookings = filteredCargoBookings.slice(
@@ -109,8 +191,8 @@ const CargoList = () => {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           fullWidth
-          InputProps={{
-            endAdornment: searchQuery && (
+          InputProps={searchQuery && {
+            endAdornment: (
               <IconButton onClick={() => setSearchQuery("")} edge="end">
                 <CloseIcon />
               </IconButton>
@@ -121,7 +203,7 @@ const CargoList = () => {
 
       <TableContainer component={Paper}>
         <Table>
-          <TableHead>
+          <TableHead sx={{ bgcolor: "whitesmoke" }}>
             <TableRow>
               <TableCell>#</TableCell>
               <TableCell>Booking No</TableCell>
@@ -147,7 +229,7 @@ const CargoList = () => {
                       variant="contained"
                       color="primary"
                       size="small"
-                      onClick={() => setSelectedCargo(cargo)}
+                      onClick={() => fetchBookingDetails(cargo.id)}
                     >
                       View
                     </Button>
@@ -200,7 +282,7 @@ const CargoList = () => {
         fullWidth
         PaperProps={{ sx: { maxHeight: "85vh" } }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ bgcolor: "whitesmoke" }}>
           Cargo Booking Details
           <IconButton
             aria-label="close"
@@ -211,7 +293,11 @@ const CargoList = () => {
           </IconButton>
         </DialogTitle>
         <DialogContent dividers>
-          {selectedCargo && (
+          {dialogLoading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+              <ClipLoader color="#3b82f6" size={50} />
+            </Box>
+          ) : selectedCargo ? (
             <Box>
               {/* Container Booking Details */}
               <Box display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={2} mb={4}>
@@ -288,16 +374,30 @@ const CargoList = () => {
                   <Typography variant="body1">{selectedCargo.descriptionOfGoods}</Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
-                  <Typography variant="caption" color="textSecondary">Container Quantity</Typography>
-                  <Typography variant="body1">{selectedCargo.containerQuantity}</Typography>
-                </Paper>
-                <Paper elevation={1} sx={{ p: 2 }}>
-                  <Typography variant="caption" color="textSecondary">Numbers</Typography>
-                  <Typography variant="body1">{selectedCargo.numbers}</Typography>
-                </Paper>
-                <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Image Path</Typography>
-                  <Typography variant="body1">{selectedCargo.imagePath || "N/A"}</Typography>
+                  <Typography variant="body1">
+                    {selectedCargo.imagePath ? (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <img
+                          src={selectedCargo.imagePath}
+                          alt={`Booking ${selectedCargo.bookingNo}`}
+                          style={{ maxWidth: "100px", maxHeight: "100px", objectFit: "contain" }}
+                          onError={(e) => handleImageError(e, "Container Booking")}
+                        />
+                        <IconButton size="small" href={selectedCargo.imagePath} target="_blank" rel="noopener noreferrer">
+                          <OpenInNewIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDownloadImage(selectedCargo.imagePath, `booking-${selectedCargo.id}.jpg`)}
+                        >
+                          <DownloadIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    ) : (
+                      "N/A"
+                    )}
+                  </Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Added By</Typography>
@@ -334,14 +434,6 @@ const CargoList = () => {
                           <Typography variant="body1">{detail.shipperPer}</Typography>
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="textSecondary">From</Typography>
-                          <Typography variant="body1">{detail.from}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">To</Typography>
-                          <Typography variant="body1">{detail.to}</Typography>
-                        </Box>
-                        <Box>
                           <Typography variant="caption" color="textSecondary">Booking No</Typography>
                           <Typography variant="body1">{detail.bookingNo}</Typography>
                         </Box>
@@ -351,7 +443,29 @@ const CargoList = () => {
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Image Path</Typography>
-                          <Typography variant="body1">{detail.imagePath || "N/A"}</Typography>
+                          <Typography variant="body1">
+                            {detail.imagePath ? (
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                <img
+                                  src={detail.imagePath}
+                                  alt={`Container ${detail.id}`}
+                                  style={{ maxWidth: "100px", maxHeight: "100px", objectFit: "contain" }}
+                                  onError={(e) => handleImageError(e, "Container Detail")}
+                                />
+                                <IconButton size="small" href={detail.imagePath} target="_blank" rel="noopener noreferrer">
+                                  <OpenInNewIcon fontSize="small" />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleDownloadImage(detail.imagePath, `container-${detail.id}.jpg`)}
+                                >
+                                  <DownloadIcon fontSize="small" />
+                                </IconButton>
+                              </Box>
+                            ) : (
+                              "N/A"
+                            )}
+                          </Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Added By</Typography>
@@ -366,71 +480,101 @@ const CargoList = () => {
                           <Typography variant="body1">{new Date(detail.updatedAt).toLocaleString()}</Typography>
                         </Box>
                       </Box>
+
+                      {/* Container Item Details in Table */}
+                      {detail.containerItems && detail.containerItems.length > 0 && (
+                        <Box mt={2}>
+                          <Typography variant="subtitle2" gutterBottom>Container Items</Typography>
+                          <TableContainer component={Paper} sx={{ bgcolor: "#f5f5f5" }}>
+                            <Table size="small">
+                              <TableHead sx={{ bgcolor: "whitesmoke" }}>
+                                <TableRow>
+                                  <TableCell>Item No</TableCell>
+                                  <TableCell>Vehicle ID</TableCell>
+                                  <TableCell>Chassis No</TableCell>
+                                  <TableCell>Year</TableCell>
+                                  <TableCell>Color</TableCell>
+                                  <TableCell>CC</TableCell>
+                                  <TableCell>Amount</TableCell>
+                                  <TableCell>Image Path</TableCell>
+                                  <TableCell>Created At</TableCell>
+                                  <TableCell>Updated At</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {detail.containerItems.map((item) => (
+                                  <TableRow key={item.id}>
+                                    <TableCell>{item.itemNo}</TableCell>
+                                    <TableCell>{item.vehicleId}</TableCell>
+                                    <TableCell>{item.chassisNo}</TableCell>
+                                    <TableCell>{item.year}</TableCell>
+                                    <TableCell>{item.color}</TableCell>
+                                    <TableCell>{item.cc}</TableCell>
+                                    <TableCell>{item.amount}</TableCell>
+                                    <TableCell>
+                                      {item.imagePath ? (
+                                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                          <img
+                                            src={item.imagePath}
+                                            alt={`Item ${item.itemNo}`}
+                                            style={{ maxWidth: "100px", maxHeight: "100px", objectFit: "contain" }}
+                                            onError={(e) => handleImageError(e, "Container Item")}
+                                          />
+                                          <IconButton size="small" href={item.imagePath} target="_blank" rel="noopener noreferrer">
+                                            <OpenInNewIcon fontSize="small" />
+                                          </IconButton>
+                                          <IconButton
+                                            size="small"
+                                            onClick={() => handleDownloadImage(item.imagePath, `item-${item.id}.jpg`)}
+                                          >
+                                            <DownloadIcon fontSize="small" />
+                                          </IconButton>
+                                        </Box>
+                                      ) : (
+                                        "N/A"
+                                      )}
+                                    </TableCell>
+                                    <TableCell>{new Date(item.createdAt).toLocaleString()}</TableCell>
+                                    <TableCell>{new Date(item.updatedAt).toLocaleString()}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        </Box>
+                      )}
                     </Paper>
                   ))}
                 </Box>
               )}
-
-              {/* Container Item Details */}
-              <Box mt={4}>
-                <Typography variant="h6" gutterBottom>Container Item Details</Typography>
-                {selectedCargo.containerItemDetails && selectedCargo.containerItemDetails.length > 0 ? (
-                  selectedCargo.containerItemDetails.map((item, idx) => (
-                    <Paper key={item.id} elevation={1} sx={{ p: 2, mb: 2 }}>
-                      <Typography variant="subtitle1" gutterBottom>Item #{item.itemNo}</Typography>
-                      <Box display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={2}>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Item No</Typography>
-                          <Typography variant="body1">{item.itemNo}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Vehicle ID</Typography>
-                          <Typography variant="body1">{item.vehicleId}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Chassis No</Typography>
-                          <Typography variant="body1">{item.chassisNo}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Year</Typography>
-                          <Typography variant="body1">{item.year}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Color</Typography>
-                          <Typography variant="body1">{item.color}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">CC</Typography>
-                          <Typography variant="body1">{item.cc}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Amount</Typography>
-                          <Typography variant="body1">{item.amount}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Created At</Typography>
-                          <Typography variant="body1">{new Date(item.createdAt).toLocaleString()}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Updated At</Typography>
-                          <Typography variant="body1">{new Date(item.updatedAt).toLocaleString()}</Typography>
-                        </Box>
-                      </Box>
-                    </Paper>
-                  ))
-                ) : (
-                  <Typography variant="body1" color="textSecondary">
-                    No container item details available.
-                  </Typography>
-                )}
-              </Box>
             </Box>
+          ) : (
+            <Typography variant="body1" color="textSecondary">
+              No details available.
+            </Typography>
           )}
         </DialogContent>
         <DialogActions>
+          {selectedCargo && (
+            <>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={() => handleUpdate(selectedCargo)}
+              >
+                Update
+              </Button>
+              <Button
+                variant="contained"
+                color="error"
+                onClick={() => handleDelete(selectedCargo.id)}
+              >
+                Delete
+              </Button>
+            </>
+          )}
           <Button
-            variant="contained"
-            color="error"
+            variant="outlined"
             onClick={() => setSelectedCargo(null)}
           >
             Close

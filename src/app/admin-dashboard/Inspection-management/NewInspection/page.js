@@ -26,18 +26,23 @@ async function getExchangeRate() {
 }
 
 export default function InspectionBookingForm() {
-  const [vehicles, setVehicles] = useState([]);
+  const [vehicles, setVehicles] = useState([]); // Search results
   const [searchChassisNo, setSearchChassisNo] = useState("");
   const [exchangeRate, setExchangeRate] = useState(0);
   const [inspectionData, setInspectionData] = useState({
     date: "",
     company: "",
     receiptImage: null,
-    added_by: null,
-    vehicles: [],
+    admin_id: null,
+    vehicles: [], // Now includes only id, chassisNo, and vamount_doller
+    invoiceno: "",
+    invoice_amount: "",
+    invoice_tax: 0,
+    invoice_total: 0,
+    invoice_amount_dollers: 0,
   });
-  const [totalAmountYen, setTotalAmountYen] = useState(0);
-  const [totalAmountDollars, setTotalAmountDollars] = useState(0);
+  const [totalAmountYen, setTotalAmountYen] = useState(0); // invoice_total
+  const [totalAmountDollars, setTotalAmountDollars] = useState(0); // invoice_amount_dollers
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -46,9 +51,9 @@ export default function InspectionBookingForm() {
   const username = useSelector((state) => state.user.username);
   const userid = useSelector((state) => state.user.id);
 
-  // Set added_by from Redux state
+  // Set admin_id from Redux state
   useEffect(() => {
-    setInspectionData((prev) => ({ ...prev, added_by: userid }));
+    setInspectionData((prev) => ({ ...prev, admin_id: userid }));
   }, [userid]);
 
   // Fetch exchange rate on mount
@@ -60,16 +65,28 @@ export default function InspectionBookingForm() {
     fetchExchangeRate();
   }, []);
 
-  // Calculate total amounts when vehicles or exchange rate changes
+  // Calculate invoice totals and per-vehicle vamount_doller when invoice_amount or vehicles change
   useEffect(() => {
-    const totalYen = inspectionData.vehicles.reduce(
-      (sum, vehicle) => sum + (parseFloat(vehicle.amount) || 0),
-      0
-    );
-    const totalDollars = totalYen * exchangeRate;
-    setTotalAmountYen(totalYen);
-    setTotalAmountDollars(totalDollars);
-  }, [inspectionData.vehicles, exchangeRate]);
+    const invoiceAmount = parseFloat(inspectionData.invoice_amount) || 0;
+    const invoiceTax = invoiceAmount * 0.1; // 10% tax
+    const invoiceTotal = invoiceAmount + invoiceTax;
+    const invoiceAmountDollers = invoiceTotal * exchangeRate;
+
+    setInspectionData((prev) => ({
+      ...prev,
+      invoice_tax: invoiceTax,
+      invoice_total: invoiceTotal,
+      invoice_amount_dollers: invoiceAmountDollers,
+      vehicles: prev.vehicles.map((vehicle) => ({
+        ...vehicle,
+        vamount_doller:
+          prev.vehicles.length > 0 ? invoiceAmountDollers / prev.vehicles.length : 0,
+      })),
+    }));
+
+    setTotalAmountYen(invoiceTotal);
+    setTotalAmountDollars(invoiceAmountDollers);
+  }, [inspectionData.invoice_amount, inspectionData.vehicles.length, exchangeRate]);
 
   const searchVehicle = async () => {
     if (!searchChassisNo) {
@@ -104,18 +121,17 @@ export default function InspectionBookingForm() {
       .then((result) => {
         const fullVehicle = result.data;
         if (fullVehicle.status === "Transport") {
-          setInspectionData((prev) => ({
-            ...prev,
-            vehicles: [
+          setInspectionData((prev) => {
+            const updatedVehicles = [
               ...prev.vehicles,
               {
                 id: fullVehicle.id,
                 chassisNo: fullVehicle.chassisNo,
-                amount: "", // Yen input
-                amount_doller: 0, // Calculated Dollars
+                vamount_doller: prev.invoice_amount_dollers / (prev.vehicles.length + 1) || 0,
               },
-            ],
-          }));
+            ];
+            return { ...prev, vehicles: updatedVehicles };
+          });
           setVehicles([]);
           setSearchChassisNo("");
         } else {
@@ -125,18 +141,6 @@ export default function InspectionBookingForm() {
       .catch((err) => {
         setError("Error checking vehicle status: " + err.message);
       });
-  };
-
-  const updateVehicleInspection = (index, field, value) => {
-    const updatedVehicles = [...inspectionData.vehicles];
-    updatedVehicles[index][field] = value;
-
-    if (field === "amount") {
-      const amountYen = parseFloat(value) || 0;
-      updatedVehicles[index].amount_doller = amountYen * exchangeRate;
-    }
-
-    setInspectionData((prev) => ({ ...prev, vehicles: updatedVehicles }));
   };
 
   const removeVehicle = (index) => {
@@ -188,18 +192,27 @@ export default function InspectionBookingForm() {
         if (!imagePath) throw new Error("Failed to upload receipt image");
       }
 
+      const vehicleNo = inspectionData.vehicles.map((v) => v.chassisNo).join(", ");
+      const vamountDoller = inspectionData.vehicles.length > 0
+        ? inspectionData.invoice_amount_dollers / inspectionData.vehicles.length
+        : 0;
+
       const payload = {
         date: inspectionData.date,
         company: inspectionData.company,
+        vehicleNo: vehicleNo,
+        invoiceno: inspectionData.invoiceno || `INS-${Date.now()}`,
+        invoice_amount: parseFloat(inspectionData.invoice_amount) || 0,
+        invoice_tax: inspectionData.invoice_tax,
+        invoice_total: inspectionData.invoice_total,
+        invoice_amount_dollers: inspectionData.invoice_amount_dollers,
+        vamount_doller: vamountDoller,
         imagePath: imagePath || "",
+        admin_id: inspectionData.admin_id,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        added_by: inspectionData.added_by,
         vehicles: inspectionData.vehicles.map((v) => ({
-          vehicleNo: v.chassisNo,
-          amount: parseFloat(v.amount) || 0,
-          amount_doller: parseFloat(v.amount_doller) || 0,
-          id: v.id, // Include id for status update
+          id: v.id, // For updating vehicle status
         })),
       };
 
@@ -222,8 +235,13 @@ export default function InspectionBookingForm() {
         date: "",
         company: "",
         receiptImage: null,
-        added_by: userid,
+        admin_id: userid,
         vehicles: [],
+        invoiceno: "",
+        invoice_amount: "",
+        invoice_tax: 0,
+        invoice_total: 0,
+        invoice_amount_dollers: 0,
       });
       setImagePreview(null);
     } catch (error) {
@@ -264,6 +282,13 @@ export default function InspectionBookingForm() {
             fullWidth
             required
           />
+          <TextField
+            label="Invoice Number"
+            variant="outlined"
+            value={inspectionData.invoiceno}
+            onChange={(e) => handleInputChange("invoiceno", e.target.value)}
+            fullWidth
+          />
           <Box display="flex" flexDirection="column">
             <TextField
               type="file"
@@ -283,8 +308,38 @@ export default function InspectionBookingForm() {
               </Box>
             )}
           </Box>
-          {/* Empty column for spacing */}
-          <Box />
+          <TextField
+            type="number"
+            label="Invoice Amount (Yen)"
+            variant="outlined"
+            value={inspectionData.invoice_amount}
+            onChange={(e) => handleInputChange("invoice_amount", e.target.value)}
+            fullWidth
+          />
+          <TextField
+            type="number"
+            label="Invoice Tax (10%) (Yen)"
+            variant="outlined"
+            value={inspectionData.invoice_tax.toFixed(2)}
+            InputProps={{ readOnly: true }}
+            fullWidth
+          />
+          <TextField
+            type="number"
+            label="Invoice Total (Yen)"
+            variant="outlined"
+            value={inspectionData.invoice_total.toFixed(2)}
+            InputProps={{ readOnly: true }}
+            fullWidth
+          />
+          <TextField
+            type="number"
+            label="Invoice Total (USD)"
+            variant="outlined"
+            value={inspectionData.invoice_amount_dollers.toFixed(2)}
+            InputProps={{ readOnly: true }}
+            fullWidth
+          />
         </Box>
       </Paper>
 
@@ -346,30 +401,33 @@ export default function InspectionBookingForm() {
           </Typography>
         ) : (
           <Box>
-            <Box display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr" gap={2} sx={{ fontWeight: "bold", mb: 1 }}>
+            <Box
+              display="grid"
+              gridTemplateColumns="1fr 1fr 1fr 1fr"
+              gap={2}
+              sx={{ fontWeight: "bold", mb: 1 }}
+            >
               <Typography variant="body1">Vehicle ID</Typography>
               <Typography variant="body1">Chassis No</Typography>
-              <Typography variant="body1">Amount (Yen)</Typography>
-              <Typography variant="body1">Amount (USD)</Typography>
+              <Typography variant="body1">Amount per Vehicle (USD)</Typography>
               <Typography variant="body1">Actions</Typography>
             </Box>
             {inspectionData.vehicles.map((vehicle, index) => (
-              <Box key={index} display="grid" gridTemplateColumns="1fr 1fr 1fr 1fr 1fr" gap={2} alignItems="center" mb={1}>
+              <Box
+                key={index}
+                display="grid"
+                gridTemplateColumns="1fr 1fr 1fr 1fr"
+                gap={2}
+                alignItems="center"
+                mb={1}
+              >
                 <Typography variant="body1">{vehicle.id}</Typography>
                 <Typography variant="body1">{vehicle.chassisNo}</Typography>
                 <TextField
                   type="number"
-                  label="Amount (Yen)"
-                  variant="outlined"
-                  value={vehicle.amount}
-                  onChange={(e) => updateVehicleInspection(index, "amount", e.target.value)}
-                  fullWidth
-                />
-                <TextField
-                  type="number"
                   label="Amount (USD)"
                   variant="outlined"
-                  value={(vehicle.amount_doller || 0).toFixed(2)}
+                  value={(vehicle.vamount_doller || 0).toFixed(2)}
                   InputProps={{ readOnly: true }}
                   fullWidth
                 />
@@ -406,5 +464,4 @@ export default function InspectionBookingForm() {
       </Button>
     </Box>
   );
-};
-
+}

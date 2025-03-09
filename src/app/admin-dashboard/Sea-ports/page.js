@@ -19,6 +19,10 @@ import {
   Box,
   Typography,
   CircularProgress,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 import { Edit as PencilIcon, Delete as TrashIcon, Add as PlusIcon } from "@mui/icons-material";
 import "react-toastify/dist/ReactToastify.css";
@@ -73,6 +77,25 @@ const deleteSeaPort = async (id) => {
   return true;
 };
 
+// Fetch all admins with full URL
+const fetchAdmins = async () => {
+  try {
+    const response = await fetch("http://localhost:3000/api/admin/adminuser");
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const result = await response.json();
+    console.log("Raw admin fetch result:", result); // Debug log
+    // If the API returns the array directly, use it as is
+    const adminData = Array.isArray(result) ? result : result.data || [];
+    console.log("Processed admin data:", adminData); // Debug log
+    return adminData;
+  } catch (error) {
+    console.error("Fetch admins error:", error);
+    throw error;
+  }
+};
+
 export default function SeaPortManagement() {
   const [seaPorts, setSeaPorts] = useState([]);
   const [filteredSeaPorts, setFilteredSeaPorts] = useState([]);
@@ -81,18 +104,22 @@ export default function SeaPortManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [loadingAction, setLoadingAction] = useState(null);
+  const [admins, setAdmins] = useState([]);
 
   useEffect(() => {
-    fetchSeaPorts()
-      .then((ports) => {
+    Promise.all([fetchSeaPorts(), fetchAdmins()])
+      .then(([ports, adminData]) => {
         console.log("Fetched sea ports:", ports);
+        console.log("Fetched admins:", adminData);
         setSeaPorts(ports);
         setFilteredSeaPorts(ports);
+        setAdmins(adminData);
       })
       .catch((err) => {
         console.error("Fetch error:", err);
         toast.error(err.message);
         setSeaPorts([]);
+        setAdmins([]);
       })
       .finally(() => setIsLoading(false));
   }, []);
@@ -135,6 +162,7 @@ export default function SeaPortManagement() {
     e.preventDefault();
     const formData = new FormData(e.target);
     const portData = Object.fromEntries(formData.entries());
+    portData.admin_id = parseInt(portData.admin_id);
 
     setLoadingAction("form");
     try {
@@ -189,6 +217,7 @@ export default function SeaPortManagement() {
                   <TableCell>No.</TableCell>
                   <TableCell>Sea Port Name</TableCell>
                   <TableCell>Location</TableCell>
+                  <TableCell>Admin</TableCell>
                   <TableCell>Created At</TableCell>
                   <TableCell>Updated At</TableCell>
                   <TableCell>Actions</TableCell>
@@ -200,6 +229,7 @@ export default function SeaPortManagement() {
                     <TableCell>{index + 1}</TableCell>
                     <TableCell>{port.name}</TableCell>
                     <TableCell>{port.location || "N/A"}</TableCell>
+                    <TableCell>{port.admin?.username || "N/A"}</TableCell>
                     <TableCell>{new Date(port.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell>{new Date(port.updatedAt).toLocaleDateString()}</TableCell>
                     <TableCell>
@@ -248,6 +278,25 @@ export default function SeaPortManagement() {
                   fullWidth
                 />
               </Box>
+              <Box mb={2}>
+                <FormControl fullWidth variant="outlined" required>
+                  <InputLabel>Admin</InputLabel>
+                  <Select
+                    name="admin_id"
+                    defaultValue={currentPort?.admin_id || ""}
+                    label="Admin"
+                  >
+                    <MenuItem value="" disabled>
+                      Select an admin
+                    </MenuItem>
+                    {admins.map((admin) => (
+                      <MenuItem key={admin.id} value={admin.id}>
+                        {admin.username} ({admin.fullname})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
               <Button
                 type="submit"
                 variant="contained"
@@ -266,6 +315,12 @@ export default function SeaPortManagement() {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Debug section - remove in production
+        <Box mt={2}>
+          <Typography>Debug - Admins in state: {admins.length}</Typography>
+          <pre>{JSON.stringify(admins, null, 2)}</pre>
+        </Box> */}
       </Box>
     </Box>
   );

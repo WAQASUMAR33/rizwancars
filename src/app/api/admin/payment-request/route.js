@@ -53,18 +53,29 @@ export async function POST(request) {
 // GET request to fetch all visa
 export async function GET() {
   try {
-    const visa = await prisma.paymentRequests.findMany({
-      include:{
-        Users:true
-      }
-    }
-    );
-    return NextResponse.json(visa);
+    const paymentRequests = await prisma.paymentRequests.findMany({
+      include: {
+        Admin: { // Changed from Users to Admin
+          select: {
+            id: true,
+            fullname: true,
+            username: true,
+            role: true,
+            balance: true,
+          },
+        },
+      },
+      orderBy: {
+        updated_at: 'desc',
+      },
+    });
+
+    return NextResponse.json(paymentRequests, { status: 200 });
   } catch (error) {
-    console.error('Error fetching visa:', error.message);
+    console.error('Error fetching payment requests:', error);
     return NextResponse.json(
       {
-        message: 'Failed to fetch visa',
+        message: 'Failed to fetch payment requests', // Corrected message to match context
         status: false,
         error: error.message,
       },

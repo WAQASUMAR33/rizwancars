@@ -1,11 +1,10 @@
-// app/api/admin/cargo-management/route.js
-import { NextResponse } from 'next/server';
-import prisma from '@/utils/prisma';
+import { NextResponse } from "next/server";
+import prisma from "@/utils/prisma";
 
 export async function POST(request) {
   try {
     const data = await request.json();
-    console.log('Received data:', JSON.stringify(data, null, 2)); // Log incoming data for debugging
+    console.log("Received data:", JSON.stringify(data, null, 2));
 
     const {
       actualShipper,
@@ -25,40 +24,109 @@ export async function POST(request) {
       shipperName,
       consignee,
       descriptionOfGoods,
-      containerQuantity,
-      numbers,
+      vanning_charges = 0,
+      seal_amount = 0,
+      surrender_fee = 0,
+      bl_fee = 0,
+      radiation_fee = 0,
+      totalAmount1 = 0,
+      totalAmount1_dollars = 0,
+      freight_amount = 0,
+      freight_amount_dollars = 0,
+      net_total_amount = 0,
+      net_total_amount_dollars = 0,
       imagePath,
       added_by,
+      admin_id,
       createdAt,
       updatedAt,
-      containerDetails, // Expecting an array with one object
-      containerItemDetails,
+      containerDetails,
     } = data;
 
-    // Validation for required fields
-    if (!bookingNo || !containerItemDetails || containerItemDetails.length === 0) {
+    // Validation
+    if (!bookingNo || !volume || !containerDetails || containerDetails.length !== volume) {
       return NextResponse.json(
-        { error: 'Missing required fields (bookingNo, containerItemDetails)', status: false },
+        { error: "Missing or invalid required fields (bookingNo, volume, containerDetails)", status: false },
         { status: 400 }
       );
     }
-    if (!containerDetails || containerDetails.length !== 1) {
-      return NextResponse.json(
-        { error: 'Exactly one ContainerDetail entry is required', status: false },
-        { status: 400 }
-      );
-    }
-    // Validate that each containerItemDetail has a vehicleId
-    for (const item of containerItemDetails) {
-      if (!item.vehicleId) {
+
+    for (const container of containerDetails) {
+      if (!container.containerItemDetails || container.containerItemDetails.length === 0) {
         return NextResponse.json(
-          { error: 'Each containerItemDetail must include a vehicleId', status: false },
+          { error: "Each ContainerDetail must include at least one ContainerItemDetail", status: false },
           { status: 400 }
         );
       }
+      for (const item of container.containerItemDetails) {
+        if (!item.vehicleId) {
+          return NextResponse.json(
+            { error: "Each ContainerItemDetail must include a vehicleId", status: false },
+            { status: 400 }
+          );
+        }
+      }
     }
 
-    // Prepare an array of Prisma operations
+    // Check for duplicate bookingNo
+    const existingBooking = await prisma.containerBooking.findUnique({
+      where: { bookingNo },
+    });
+    if (existingBooking) {
+      return NextResponse.json(
+        { error: `Booking number '${bookingNo}' already exists`, status: false },
+        { status: 409 }
+      );
+    }
+
+    // Fetch vehicle data
+    const vehicleIds = containerDetails.flatMap((container) =>
+      container.containerItemDetails.map((item) => item.vehicleId)
+    );
+    console.log("Fetching vehicles with IDs:", vehicleIds);
+    const vehicleData = await prisma.addVehicle.findMany({
+      where: { id: { in: vehicleIds } },
+      select: { id: true, admin_id: true },
+    });
+    console.log("Fetched vehicle data:", JSON.stringify(vehicleData, null, 2));
+
+    const foundVehicleIds = vehicleData.map((v) => v.id);
+    const missingVehicleIds = vehicleIds.filter((id) => !foundVehicleIds.includes(id));
+    if (missingVehicleIds.length > 0) {
+      return NextResponse.json(
+        { error: `Vehicle(s) not found: ${missingVehicleIds.join(", ")}`, status: false },
+        { status: 404 }
+      );
+    }
+
+    // Map vehicle IDs to admin_ids
+    const vehicleAdminMap = vehicleData.reduce((map, vehicle) => {
+      map[vehicle.id] = vehicle.admin_id;
+      return map;
+    }, {});
+
+    // Fetch admin balances
+    const uniqueAdminIds = [...new Set([...Object.values(vehicleAdminMap), admin_id].filter(Boolean))];
+    console.log("Fetching admins with IDs:", uniqueAdminIds);
+    const adminData = await prisma.admin.findMany({
+      where: { id: { in: uniqueAdminIds } },
+      select: { id: true, balance: true },
+    });
+    console.log("Fetched admin data:", JSON.stringify(adminData, null, 2));
+
+    const adminBalanceMap = adminData.reduce((map, admin) => {
+      map[admin.id] = admin.balance;
+      return map;
+    }, {});
+    const missingAdmins = uniqueAdminIds.filter((id) => !adminBalanceMap[id] && adminBalanceMap[id] !== 0);
+    if (missingAdmins.length > 0) {
+      return NextResponse.json(
+        { error: `Admin(s) not found: ${missingAdmins.join(", ")}`, status: false },
+        { status: 404 }
+      );
+    }
+
+    // Prepare Prisma operations
     const operations = [];
 
     // Create ContainerBooking
@@ -71,7 +139,7 @@ export async function POST(request) {
           etd: new Date(etd),
           cyCutOff: new Date(cyCutOff),
           eta: new Date(eta),
-          volume,
+          volume: parseInt(volume),
           carrier,
           vessel,
           portOfLoading,
@@ -81,81 +149,143 @@ export async function POST(request) {
           freightTerm,
           shipperName,
           consignee,
-          descriptionOfGoods: descriptionOfGoods || "", // Default to empty string if not provided
-          containerQuantity,
-          numbers,
-          imagePath: imagePath || "", // Default to empty string
-          added_by: added_by || 0, // Default to 0 if not provided
+          descriptionOfGoods: descriptionOfGoods || "",
+          vanning_charges: parseFloat(vanning_charges) || 0,
+          seal_amount: parseFloat(seal_amount) || 0,
+          surrender_fee: parseFloat(surrender_fee) || 0,
+          bl_fee: parseFloat(bl_fee) || 0,
+          radiation_fee: parseFloat(radiation_fee) || 0,
+          totalAmount1: parseFloat(totalAmount1) || 0,
+          totalAmount1_dollars: parseFloat(totalAmount1_dollars) || 0,
+          freight_amount: parseFloat(freight_amount) || 0,
+          freight_amount_dollars: parseFloat(freight_amount_dollars) || 0,
+          net_total_amount: parseFloat(net_total_amount) || 0,
+          net_total_amount_dollars: parseFloat(net_total_amount_dollars) || 0,
+          imagePath: imagePath || "",
+          added_by: parseInt(added_by) || 0,
+          admin_id: parseInt(admin_id) || 0,
           createdAt: new Date(createdAt),
           updatedAt: new Date(updatedAt),
           containerDetails: {
-            create: {
-              consigneeName: containerDetails[0].consigneeName,
-              notifyParty: containerDetails[0].notifyParty,
-              shipperPer: containerDetails[0].shipperPer,
-              from: containerDetails[0].from,
-              to: containerDetails[0].to,
-              note: containerDetails[0].note,
-              imagePath: containerDetails[0].imagePath || "", // Default to empty string
-              added_by: containerDetails[0].added_by || 0, // Default to 0 if not provided
-            },
+            create: containerDetails.map((container) => ({
+              consigneeName: container.consigneeName,
+              notifyParty: container.notifyParty,
+              shipperPer: container.shipperPer,
+              bookingNo: container.bookingNo,
+              note: container.note || "",
+              imagePath: container.imagePath || "",
+              added_by: parseInt(container.added_by) || 0,
+              admin_id: parseInt(container.admin_id) || 0,
+            })),
           },
         },
-        include: {
-          containerDetails: true, // Include created ContainerDetail in response
-        },
+        include: { containerDetails: true },
       })
     );
 
-    // Create ContainerItemDetail records and update AddVehicle status using vehicleId
-    containerItemDetails.forEach(item => {
-      operations.push(
-        prisma.containerItemDetail.create({
-          data: {
-            itemNo: item.itemNo,
-            chassisNo: item.chassisNo || "", // Optional field, included if provided
-            year: item.year,
-            color: item.color,
-            cc: item.cc,
-            amount: parseFloat(item.amount) || 0,
-            vehicleId: item.vehicleId, // Required field, used for relation
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        })
-      );
-      operations.push(
-        prisma.addVehicle.update({
-          where: { id: item.vehicleId }, // Directly use vehicleId as the unique identifier
-          data: {
-            status: "Shipped", // Matches VehicleStatus enum
-            updatedAt: new Date(),
-          },
-        })
-      );
+    // Create ContainerItemDetail and update AddVehicle
+    containerDetails.forEach((container) => {
+      container.containerItemDetails.forEach((item) => {
+        operations.push(
+          prisma.containerItemDetail.create({
+            data: {
+              itemNo: item.itemNo,
+              chassisNo: item.chassisNo || "",
+              year: item.year || "",
+              color: item.color || "",
+              cc: item.cc || "",
+              amount: parseFloat(item.amount) || 0,
+              vehicleId: parseInt(item.vehicleId),
+              containerDetailId: null, // Updated later
+              added_by: parseInt(added_by) || 0,
+              admin_id: vehicleAdminMap[item.vehicleId] || 0,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          })
+        );
+        operations.push(
+          prisma.addVehicle.update({
+            where: { id: parseInt(item.vehicleId) },
+            data: { status: "Shipped", updatedAt: new Date() },
+          })
+        );
+      });
     });
 
-    // Execute all operations in a single transaction
-    const results = await prisma.$transaction(operations);
+    // Admin balance updates
+    const adminUpdates = {};
+    containerDetails.forEach((container) => {
+      container.containerItemDetails.forEach((item) => {
+        const vehicleAdminId = vehicleAdminMap[item.vehicleId];
+        if (!adminUpdates[vehicleAdminId]) {
+          adminUpdates[vehicleAdminId] = { totalDebit: 0, totalCredit: 0, vehicleCount: 0 };
+        }
+        adminUpdates[vehicleAdminId].vehicleCount += 1;
+        if (freightTerm.toLowerCase() === "pre paid") {
+          adminUpdates[vehicleAdminId].totalDebit += parseFloat(net_total_amount_dollars) || 0;
+        } else if (freightTerm.toLowerCase() === "collect") {
+          adminUpdates[vehicleAdminId].totalCredit += parseFloat(totalAmount1_dollars) || 0;
+        }
+      });
+    });
 
-    // Extract the ContainerBooking record from results (first operation)
-    const createdBooking = results[0]; // The first result is the ContainerBooking with included containerDetails
+    for (const [adminId, { totalDebit, totalCredit }] of Object.entries(adminUpdates)) {
+      const currentBalance = adminBalanceMap[adminId] || 0;
+      const newBalance = currentBalance - totalDebit + totalCredit;
 
-    console.log('Created cargo booking:', JSON.stringify(createdBooking, null, 2)); // Debug log
+      operations.push(
+        prisma.admin.update({
+          where: { id: parseInt(adminId) },
+          data: { balance: newBalance },
+        })
+      );
+    }
+
+    // Execute transaction
+    console.log("Executing transaction with operations:", operations.length);
+    const results = await prisma.$transaction(operations, {
+      maxWait: 10000,
+      timeout: 20000,
+    });
+    console.log("Transaction results:", JSON.stringify(results, null, 2));
+
+    // Update ContainerItemDetail with containerDetailId
+    const createdBooking = results[0];
+    const containerDetailIds = createdBooking.containerDetails.map((cd) => cd.id);
+    let operationIndex = 1;
+    for (let i = 0; i < containerDetails.length; i++) {
+      const container = containerDetails[i];
+      for (let j = 0; j < container.containerItemDetails.length; j++) {
+        const itemResult = results[operationIndex];
+        operationIndex += 2; // Skip AddVehicle update
+        console.log(`Updating ContainerItemDetail ID ${itemResult.id} with containerDetailId ${containerDetailIds[i]}`);
+        await prisma.containerItemDetail.update({
+          where: { id: itemResult.id },
+          data: { containerDetailId: containerDetailIds[i] },
+        });
+      }
+    }
+
+    console.log("Created cargo booking:", JSON.stringify(createdBooking, null, 2));
     return NextResponse.json(
       {
-        message: 'Cargo booking created successfully and vehicle statuses updated',
+        message: "Cargo booking created successfully",
         status: true,
         data: createdBooking,
       },
       { status: 201 }
     );
   } catch (error) {
+
     return NextResponse.json(
       {
-        error: 'Internal server error',
+        error: "Internal server error",
         status: false,
-        details: error.message || 'Unknown error occurred',
+        details: error.message || "Unknown error occurred",
+        code: error.code,
+        meta: error.meta,
+        stack: error.stack,
       },
       { status: 500 }
     );
@@ -163,8 +293,6 @@ export async function POST(request) {
     await prisma.$disconnect();
   }
 }
-
-
 
 export async function GET(request) {
   try {
@@ -208,7 +336,7 @@ export async function GET(request) {
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error fetching cargo bookings:', error);
+   
     return NextResponse.json(
       {
         error: 'Internal server error',
