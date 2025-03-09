@@ -36,9 +36,9 @@ const CollectVehicle = () => {
     date: new Date().toISOString().split("T")[0],
     invoiceno: "",
     imageFile: null,
-    imagePreview: null, // For previewing the image
+    imagePreview: null,
     imagePath: "",
-    admin_id: 1, // Replace with auth
+    admin_id: 1,
   });
 
   // Search for a vehicle by vehicleId or chassisNo
@@ -95,7 +95,7 @@ const CollectVehicle = () => {
     const { name, value, files } = e.target;
     if (name === "imageFile" && files && files[0]) {
       const file = files[0];
-      const previewUrl = URL.createObjectURL(file); // Generate preview URL
+      const previewUrl = URL.createObjectURL(file);
       setPortCollect((prev) => ({
         ...prev,
         imageFile: file,
@@ -109,7 +109,7 @@ const CollectVehicle = () => {
     }
   };
 
-  // Clean up preview URL when component unmounts or image changes
+  // Clean up preview URL
   useEffect(() => {
     return () => {
       if (portCollect.imagePreview) {
@@ -123,18 +123,15 @@ const CollectVehicle = () => {
     setVehicles((prev) => prev.filter((v) => v.vehicleId !== vehicleId));
   };
 
-  // Convert file to Base64
-  const fileToBase64 = (file) => {
+  // Convert file to Base64 (full data URL)
+  const convertToBase64 = (file) => {
     return new Promise((resolve, reject) => {
-      if (!window.FileReader) {
-        reject(new Error("FileReader API is not available in this environment"));
-        return;
-      }
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => {
-        const base64String = reader.result.split(",")[1];
+        const base64String = reader.result;
         console.log("Base64 conversion successful, length:", base64String.length);
+        console.log("Base64 snippet:", base64String.substring(0, 50));
         resolve(base64String);
       };
       reader.onerror = (error) => {
@@ -144,38 +141,43 @@ const CollectVehicle = () => {
     });
   };
 
-  // Upload image to server as Base64
+  // Upload image to server
   const uploadImageToServer = async (base64Image) => {
     try {
-      console.log("Uploading Base64 image, length:", base64Image.length);
-      const response = await fetch("/api/upload", {
+      const uploadApiUrl = process.env.NEXT_PUBLIC_IMAGE_UPLOAD_API;
+      console.log("Uploading to:", uploadApiUrl);
+      console.log("Base64 image length:", base64Image.length);
+      console.log("Base64 snippet:", base64Image.substring(0, 50));
+
+      const response = await fetch(uploadApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64Image, fileName: portCollect.imageFile.name }),
+        body: JSON.stringify({ image: base64Image }),
       });
       const data = await response.json();
       console.log("Upload response:", data);
+
       if (!response.ok || !data.image_url) {
         throw new Error(data.error || "Failed to upload image");
       }
-      const fullPath = `${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_PATH || "/uploads"}/${data.image_url}`;
+
+      const fullPath = `${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_PATH}/${data.image_url}`;
       console.log("Image uploaded successfully, path:", fullPath);
       return fullPath;
     } catch (error) {
       console.error("Image upload error:", error);
-      throw error;
+      throw error; // Re-throw to handle in handleSave
     }
   };
 
   // Calculate total amount and amount per vehicle
   useEffect(() => {
     const { freight, port_charges, clearingcharges, othercharges } = charges;
-    const total = (
+    const total =
       (freight || 0) +
       (port_charges || 0) +
       (clearingcharges || 0) +
-      (othercharges || 0)
-    );
+      (othercharges || 0);
     setTotalAmount(total);
 
     const totalVehicles = vehicles.length;
@@ -200,12 +202,12 @@ const CollectVehicle = () => {
     try {
       let imagePath = portCollect.imagePath;
       if (portCollect.imageFile) {
-        const base64Image = await fileToBase64(portCollect.imageFile);
+        const base64Image = await convertToBase64(portCollect.imageFile);
         imagePath = await uploadImageToServer(base64Image);
         if (!imagePath) {
           throw new Error("Image upload failed");
         }
-        setPortCollect((prev) => ({ ...prev, imagePath })); // Update imagePath after upload
+        setPortCollect((prev) => ({ ...prev, imagePath }));
       }
 
       const portCollectData = vehicles.map((vehicle) => ({
@@ -323,16 +325,6 @@ const CollectVehicle = () => {
             sx={{ flex: "1 1 200px" }}
             InputProps={{ inputProps: { min: 0, step: "0.01" } }}
           />
-
-
-          <TextField
-            label="Total Amount"
-            value={totalAmount.toFixed(2)}
-            variant="outlined"
-            disabled
-            sx={{ maxWidth: "200px" }}
-            InputProps={{ startAdornment: "$" }}
-          />
           <TextField
             label="Invoice Number"
             name="invoiceno"
@@ -364,7 +356,14 @@ const CollectVehicle = () => {
             />
           </Box>
         )}
-       
+        <TextField
+          label="Total Amount"
+          value={totalAmount.toFixed(2)}
+          variant="outlined"
+          disabled
+          sx={{ maxWidth: "200px" }}
+          InputProps={{ startAdornment: "$" }}
+        />
       </Box>
 
       {/* Vehicle Search and Add */}

@@ -80,7 +80,7 @@ const deleteSeaPort = async (id) => {
 // Fetch all admins with full URL
 const fetchAdmins = async () => {
   try {
-    const response = await fetch("http://localhost:3000/api/admin/adminuser");
+    const response = await fetch("/api/admin/adminuser");
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

@@ -113,7 +113,7 @@ const Sidebar = () => {
       subitems: [
         { title: "New Invoice", path: "/admin-dashboard/Invoice-Form/NewInvoice", icon: <IoIosAddCircle />, roles: ["admin", "sub admin"] },
         { title: "Invoice's List", path: "/admin-dashboard/Invoice-Form", icon: <FaListOl />, roles: ["admin", "sub admin"] },
-        { title: "Incomplete Invoices", path: "/admin-dashboard/Hotel-Management/Hotel-Booking", icon: <FaListOl />, roles: ["admin", "sub admin"] },
+        { title: "Incomplete Invoices", path: "/admin-dashboard/Invoice-Form", icon: <FaListOl />, roles: ["admin", "sub admin"] },
       ],
     },
     {

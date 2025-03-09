@@ -109,7 +109,7 @@ export async function GET(request) {
       },
     });
   } catch (error) {
-    console.error("Vehicle search error:", error.message, error.stack);
+    
     return NextResponse.json(
       { status: false, error: "Internal Server Error: " + error.message },
       { status: 500 }
