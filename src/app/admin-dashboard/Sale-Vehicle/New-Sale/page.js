@@ -78,7 +78,7 @@ export default function SaleVehicle() {
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/vehicles/search?vehicleNo=${searchQuery}`);
+      const response = await fetch(`/api/admin/sale/search?query=${searchQuery}`);
       if (!response.ok) throw new Error('Vehicle not found');
       const result = await response.json();
 

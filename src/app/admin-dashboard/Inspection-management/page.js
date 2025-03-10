@@ -48,8 +48,15 @@ const InspectionList = () => {
         const fetchedInspections = result.data || [];
         console.log("Fetched inspections:", fetchedInspections);
 
-        setInspections(fetchedInspections);
-        setFilteredInspections(fetchedInspections);
+        // Normalize data to handle missing fields
+        const normalizedInspections = fetchedInspections.map((inspection) => ({
+          ...inspection,
+          amount: inspection.amount || 0, // Default to 0 if amount is undefined
+          imagePath: inspection.imagePath || "",
+          vehicle: inspection.vehicle || {}, // Default to empty object if vehicle is undefined
+        }));
+        setInspections(normalizedInspections);
+        setFilteredInspections(normalizedInspections);
       } catch (err) {
         console.error("Fetch error:", err);
         setError(err.message);
@@ -139,7 +146,7 @@ const InspectionList = () => {
                   <TableCell>{new Date(inspection.date).toLocaleDateString()}</TableCell>
                   <TableCell>{inspection.company}</TableCell>
                   <TableCell>{inspection.vehicleNo}</TableCell>
-                  <TableCell>{inspection.amount.toFixed(2)}</TableCell>
+                  <TableCell>${(inspection.amount || 0).toFixed(2)}</TableCell> {/* Fallback to 0 */}
                   <TableCell>
                     <Button
                       variant="contained"
@@ -231,7 +238,7 @@ const InspectionList = () => {
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Amount</Typography>
-                  <Typography variant="body1">{selectedInspection.amount.toFixed(2)}</Typography>
+                  <Typography variant="body1">${(selectedInspection.amount || 0).toFixed(2)}</Typography> {/* Fallback to 0 */}
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Image Path</Typography>
@@ -239,7 +246,7 @@ const InspectionList = () => {
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Added By</Typography>
-                  <Typography variant="body1">{selectedInspection.added_by}</Typography>
+                  <Typography variant="body1">{selectedInspection.added_by || 'N/A'}</Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Created At</Typography>
@@ -259,47 +266,47 @@ const InspectionList = () => {
                     <Box display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={2}>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Vehicle ID</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.id}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.id || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Invoice No</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.invoiceNo}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.invoiceNo || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Chassis No</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.chassisNo}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.chassisNo || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Maker</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.maker}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.maker || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Year</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.year}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.year || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Color</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.color}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.color || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Engine Type</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.engineType}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.engineType || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Total Amount</Typography>
-                        <Typography variant="body1">{Number(selectedInspection.vehicle.totalAmount).toFixed(2)}</Typography>
+                        <Typography variant="body1">{Number(selectedInspection.vehicle.totalAmount || 0).toFixed(2)}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Sending Port</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.sendingPort}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.sendingPort || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Status</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.status}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.status || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Added By</Typography>
-                        <Typography variant="body1">{selectedInspection.vehicle.added_by}</Typography>
+                        <Typography variant="body1">{selectedInspection.vehicle.added_by || 'N/A'}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="textSecondary">Created At</Typography>
