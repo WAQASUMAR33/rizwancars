@@ -53,8 +53,18 @@ const InvoicesList = () => {
         const fetchedInvoices = result.data || [];
         console.log("Fetched invoices:", fetchedInvoices);
 
-        setInvoices(fetchedInvoices);
-        setFilteredInvoices(fetchedInvoices);
+        // Normalize field names to match component expectations
+        const normalizedInvoices = fetchedInvoices.map((invoice) => ({
+          ...invoice,
+          createdAt: invoice.createdAt || invoice.created_at,
+          updatedAt: invoice.updatedAt || invoice.updated_at,
+          amountDoller: invoice.amount_doller,
+          amountYen: invoice.amountYen || invoice.amount_yen,
+          vehicles: invoice.vehicles || [],
+          imagePath: invoice.imagePath || "",
+        }));
+        setInvoices(normalizedInvoices);
+        setFilteredInvoices(normalizedInvoices);
       } catch (err) {
         console.error("Fetch error:", err);
         setError(err.message);
@@ -91,9 +101,7 @@ const InvoicesList = () => {
     try {
       const response = await fetch(`/api/admin/invoice-management/${selectedInvoice.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: editedStatus }),
       });
 
@@ -168,10 +176,9 @@ const InvoicesList = () => {
               <TableCell>#</TableCell>
               <TableCell>Date</TableCell>
               <TableCell>Number</TableCell>
-              <TableCell>Amount</TableCell>
+              <TableCell>Amount (USD)</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Auction House</TableCell>
-              <TableCell>Auction</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -182,14 +189,11 @@ const InvoicesList = () => {
                   <TableCell>{(currentPage - 1) * itemsPerPage + index + 1}</TableCell>
                   <TableCell>{new Date(invoice.date).toLocaleDateString()}</TableCell>
                   <TableCell>{invoice.number}</TableCell>
-                  <TableCell>
-                    ${(invoice.amount ? parseFloat(invoice.amount) : 0).toFixed(2)}
-                  </TableCell>
-                  <TableCell sx={{ color: invoice.status === "Paid" ? "green" : "red" }}>
+                  <TableCell>${(invoice.amountDoller || 0).toFixed(2)}</TableCell>
+                  <TableCell sx={{ color: invoice.status === "PAID" ? "green" : "red" }}>
                     {invoice.status}
                   </TableCell>
                   <TableCell>{invoice.auctionHouse}</TableCell>
-                  <TableCell>{invoice.auction}</TableCell>
                   <TableCell>
                     <Button
                       variant="contained"
@@ -207,7 +211,7 @@ const InvoicesList = () => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={7} align="center">
                   No invoices found.
                 </TableCell>
               </TableRow>
@@ -278,20 +282,20 @@ const InvoicesList = () => {
                   <Typography variant="body1">{selectedInvoice.number}</Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
-                  <Typography variant="caption" color="textSecondary">Amount</Typography>
-                  <Typography variant="body1">${(selectedInvoice.amount ? parseFloat(selectedInvoice.amount) : 0).toFixed(2)}</Typography>
+                  <Typography variant="caption" color="textSecondary">Amount (USD)</Typography>
+                  <Typography variant="body1">${(selectedInvoice.amountDoller || 0).toFixed(2)}</Typography>
+                </Paper>
+                <Paper elevation={1} sx={{ p: 2 }}>
+                  <Typography variant="caption" color="textSecondary">Amount (Yen)</Typography>
+                  <Typography variant="body1">{selectedInvoice.amountYen || 'N/A'}</Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Auction House</Typography>
                   <Typography variant="body1">{selectedInvoice.auctionHouse}</Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
-                  <Typography variant="caption" color="textSecondary">Auction</Typography>
-                  <Typography variant="body1">{selectedInvoice.auction}</Typography>
-                </Paper>
-                <Paper elevation={1} sx={{ p: 2 }}>
-                  <Typography variant="caption" color="textSecondary">Amount (Yen)</Typography>
-                  <Typography variant="body1">{selectedInvoice.amountYen}</Typography>
+                  <Typography variant="caption" color="textSecondary">Added By</Typography>
+                  <Typography variant="body1">{selectedInvoice.added_by || 'N/A'}</Typography>
                 </Paper>
                 <Paper elevation={1} sx={{ p: 2 }}>
                   <Typography variant="caption" color="textSecondary">Created At</Typography>
@@ -301,6 +305,23 @@ const InvoicesList = () => {
                   <Typography variant="caption" color="textSecondary">Updated At</Typography>
                   <Typography variant="body1">{new Date(selectedInvoice.updatedAt).toLocaleString()}</Typography>
                 </Paper>
+                <Paper elevation={1} sx={{ p: 2 }}>
+                  <Typography variant="caption" color="textSecondary">Invoice Image</Typography>
+                  {selectedInvoice.imagePath ? (
+                    <a href={selectedInvoice.imagePath} download={`invoice-${selectedInvoice.id}.png`}>
+                      <img
+                        src={selectedInvoice.imagePath}
+                        alt="Invoice"
+                        style={{ width: 100, height: 100, objectFit: "cover", borderRadius: 4, cursor: "pointer" }}
+                      />
+                      <Typography variant="caption" color="primary" sx={{ mt: 1, display: "block" }}>
+                        Click to download
+                      </Typography>
+                    </a>
+                  ) : (
+                    <Typography variant="body1">No image available</Typography>
+                  )}
+                </Paper>
                 <Paper elevation={1} sx={{ p: 2, display: "flex", alignItems: "center", gap: 2 }}>
                   <FormControl fullWidth variant="outlined">
                     <InputLabel>Status</InputLabel>
@@ -309,8 +330,8 @@ const InvoicesList = () => {
                       onChange={(e) => handleStatusChange(e.target.value)}
                       label="Status"
                     >
-                      <MenuItem value="Unpaid">Unpaid</MenuItem>
-                      <MenuItem value="Paid">Paid</MenuItem>
+                      <MenuItem value="UNPAID">Unpaid</MenuItem>
+                      <MenuItem value="PAID">Paid</MenuItem>
                     </Select>
                   </FormControl>
                   <Button variant="contained" color="success" onClick={saveStatus}>
@@ -319,100 +340,112 @@ const InvoicesList = () => {
                 </Paper>
               </Box>
 
-              {selectedInvoice.addVehicles && selectedInvoice.addVehicles.length > 0 && (
+              {selectedInvoice.vehicles && selectedInvoice.vehicles.length > 0 && (
                 <Box mt={4}>
                   <Typography variant="h6" gutterBottom>Vehicle Details</Typography>
-                  {selectedInvoice.addVehicles.map((vehicle, idx) => (
+                  {selectedInvoice.vehicles.map((vehicle, idx) => (
                     <Paper key={vehicle.id} elevation={1} sx={{ p: 2, mb: 2 }}>
                       <Typography variant="subtitle1" gutterBottom>Vehicle #{idx + 1}</Typography>
                       <Box display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={2}>
                         <Box>
-                          <Typography variant="caption" color="textSecondary">Invoice No</Typography>
-                          <Typography variant="body1">{vehicle.invoiceNo}</Typography>
-                        </Box>
-                        <Box>
                           <Typography variant="caption" color="textSecondary">Chassis No</Typography>
-                          <Typography variant="body1">{vehicle.chassisNo}</Typography>
+                          <Typography variant="body1">{vehicle.chassisNo || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Maker</Typography>
-                          <Typography variant="body1">{vehicle.maker}</Typography>
+                          <Typography variant="body1">{vehicle.maker || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Year</Typography>
-                          <Typography variant="body1">{vehicle.year}</Typography>
+                          <Typography variant="body1">{vehicle.year || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Color</Typography>
-                          <Typography variant="body1">{vehicle.color}</Typography>
+                          <Typography variant="body1">{vehicle.color || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Engine Type</Typography>
-                          <Typography variant="body1">{vehicle.engineType}</Typography>
+                          <Typography variant="body1">{vehicle.engineType || 'N/A'}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="textSecondary">Auction Amount</Typography>
+                          <Typography variant="body1">{vehicle.auction_amount || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">10% Add</Typography>
-                          <Typography variant="body1">{vehicle.tenPercentAdd}</Typography>
+                          <Typography variant="body1">{vehicle.tenPercentAdd || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Recycle Amount</Typography>
-                          <Typography variant="body1">{vehicle.recycleAmount}</Typography>
+                          <Typography variant="body1">{vehicle.recycleAmount || 'N/A'}</Typography>
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="textSecondary">Auction Fee</Typography>
-                          <Typography variant="body1">{vehicle.auctionFee}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="textSecondary">Auction Fee Amount</Typography>
-                          <Typography variant="body1">{vehicle.auctionFeeAmount}</Typography>
+                          <Typography variant="caption" color="textSecondary">Auction House</Typography>
+                          <Typography variant="body1">{vehicle.auction_house || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Bid Amount</Typography>
-                          <Typography variant="body1">{vehicle.bidAmount}</Typography>
+                          <Typography variant="body1">{vehicle.bidAmount || 'N/A'}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="textSecondary">Bid Amount 10%</Typography>
+                          <Typography variant="body1">{vehicle.bidAmount10per || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Commission Amount</Typography>
-                          <Typography variant="body1">{vehicle.commissionAmount}</Typography>
+                          <Typography variant="body1">{vehicle.commissionAmount || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Number Plate Tax</Typography>
-                          <Typography variant="body1">{vehicle.numberPlateTax}</Typography>
+                          <Typography variant="body1">{vehicle.numberPlateTax || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Repair Charges</Typography>
-                          <Typography variant="body1">{vehicle.repairCharges}</Typography>
+                          <Typography variant="body1">{vehicle.repairCharges || 'N/A'}</Typography>
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="textSecondary">Total Amount</Typography>
-                          <Typography variant="body1">{vehicle.totalAmount}</Typography>
+                          <Typography variant="caption" color="textSecondary">Total Amount (Yen)</Typography>
+                          <Typography variant="body1">{vehicle.totalAmount_yen || 'N/A'}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="textSecondary">Total Amount (USD)</Typography>
+                          <Typography variant="body1">{vehicle.totalAmount_dollers || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Sending Port</Typography>
-                          <Typography variant="body1">{vehicle.sendingPort}</Typography>
+                          <Typography variant="body1">{vehicle.seaPort?.name || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Additional Amount</Typography>
-                          <Typography variant="body1">{vehicle.additionalAmount}</Typography>
+                          <Typography variant="body1">{vehicle.additionalAmount || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Document Required</Typography>
-                          <Typography variant="body1">{vehicle.isDocumentRequired}</Typography>
+                          <Typography variant="body1">{vehicle.isDocumentRequired === 'yes' ? 'Yes' : 'No' || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Document Receive Date</Typography>
-                          <Typography variant="body1">{vehicle.documentReceiveDate ? new Date(vehicle.documentReceiveDate).toLocaleString() : "N/A"}</Typography>
+                          <Typography variant="body1">{vehicle.documentReceiveDate ? new Date(vehicle.documentReceiveDate).toLocaleString() : 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Ownership</Typography>
-                          <Typography variant="body1">{vehicle.isOwnership}</Typography>
+                          <Typography variant="body1">{vehicle.isOwnership === 'yes' ? 'Yes' : 'No' || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Ownership Date</Typography>
-                          <Typography variant="body1">{vehicle.ownershipDate ? new Date(vehicle.ownershipDate).toLocaleString() : "N/A"}</Typography>
+                          <Typography variant="body1">{vehicle.ownershipDate ? new Date(vehicle.ownershipDate).toLocaleString() : 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Status</Typography>
-                          <Typography variant="body1">{vehicle.status}</Typography>
+                          <Typography variant="body1">{vehicle.status || 'N/A'}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="textSecondary">Admin</Typography>
+                          <Typography variant="body1">{vehicle.admin?.fullname || 'N/A'}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="textSecondary">Added By</Typography>
+                          <Typography variant="body1">{vehicle.added_by || 'N/A'}</Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" color="textSecondary">Created At</Typography>
@@ -422,6 +455,34 @@ const InvoicesList = () => {
                           <Typography variant="caption" color="textSecondary">Updated At</Typography>
                           <Typography variant="body1">{new Date(vehicle.updatedAt).toLocaleString()}</Typography>
                         </Box>
+                        {vehicle.vehicleImages && vehicle.vehicleImages.length > 0 ? (
+                          <Box sx={{ gridColumn: "span 4" }}>
+                            <Typography variant="caption" color="textSecondary">Images</Typography>
+                            <Box display="flex" gap={2} mt={1}>
+                              {vehicle.vehicleImages.map((image, imgIdx) => (
+                                <a
+                                  key={imgIdx}
+                                  href={image.imagePath}
+                                  download={`vehicle-${vehicle.id}-image-${imgIdx + 1}.${image.imagePath.split('.').pop()}`}
+                                >
+                                  <img
+                                    src={image.imagePath}
+                                    alt={`Vehicle Image ${imgIdx + 1}`}
+                                    style={{ width: 100, height: 100, objectFit: "cover", borderRadius: 4, cursor: "pointer" }}
+                                  />
+                                  <Typography variant="caption" color="primary" sx={{ mt: 1, display: "block", textAlign: "center" }}>
+                                    Download
+                                  </Typography>
+                                </a>
+                              ))}
+                            </Box>
+                          </Box>
+                        ) : (
+                          <Box sx={{ gridColumn: "span 4" }}>
+                            <Typography variant="caption" color="textSecondary">Images</Typography>
+                            <Typography variant="body1">No images available</Typography>
+                          </Box>
+                        )}
                       </Box>
                     </Paper>
                   ))}

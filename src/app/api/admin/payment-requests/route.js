@@ -4,11 +4,12 @@ import prisma from '../../../../utils/prisma';
 export async function POST(request) {
   try {
     const body = await request.json();
-    console.log("Payload ",body);
-    const {  userid, transactionno, amount, img_url, status, verified_by } = body;
+    console.log("Payload ", body);
+
+    const { admin_id, transactionno, amount, img_url, status, verified_by } = body;
 
     // Validate required fields
-    if (!userid || !transactionno || !amount || !img_url || !status) {
+    if (!admin_id || !transactionno || !amount || !img_url || !status) {
       return NextResponse.json(
         { message: 'Missing required fields', status: false },
         { status: 400 }
@@ -24,24 +25,40 @@ export async function POST(request) {
       );
     }
 
-    // Create a new visa in the database
-    const newvisa = await prisma.paymentRequests.create({
+    // Ensure admin_id is a valid integer
+    const numericAdminId = parseInt(admin_id);
+    if (isNaN(numericAdminId)) {
+      return NextResponse.json(
+        { message: 'Invalid admin_id value', status: false },
+        { status: 400 }
+      );
+    }
+
+    // Create a new payment request in the database
+    const newPaymentRequest = await prisma.paymentRequests.create({
       data: {
-        userid : parseInt(userid), transactionno, img_url: img_url,
+        admin_id: numericAdminId,
+        transactionno,
+        img_url,
         amount: numericAmount,
         status,
         verified_by,
-        created_at: new Date(),
-        updated_at: new Date(),
       },
     });
 
-    return NextResponse.json(newvisa);
-  } catch (error) {
-    console.error('Error creating visa:', error.message);
     return NextResponse.json(
       {
-        message: 'Failed to create visa',
+        message: 'Payment request created successfully',
+        status: true,
+        data: newPaymentRequest,
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error('Error creating payment request:', error.message);
+    return NextResponse.json(
+      {
+        message: 'Failed to create payment request',
         status: false,
         error: error.message,
       },
@@ -50,12 +67,12 @@ export async function POST(request) {
   }
 }
 
-// GET request to fetch all visa
+// GET request to fetch all payment requests
 export async function GET() {
   try {
     const paymentRequests = await prisma.paymentRequests.findMany({
       include: {
-        Admin: { // Changed from Users to Admin
+        Admin: {
           select: {
             id: true,
             fullname: true,
@@ -70,12 +87,19 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(paymentRequests, { status: 200 });
+    return NextResponse.json(
+      {
+        message: 'Payment requests fetched successfully',
+        status: true,
+        data: paymentRequests,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error('Error fetching payment requests:', error);
     return NextResponse.json(
       {
-        message: 'Failed to fetch payment requests', // Corrected message to match context
+        message: 'Failed to fetch payment requests',
         status: false,
         error: error.message,
       },

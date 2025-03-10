@@ -18,33 +18,30 @@ import { ClipLoader } from "react-spinners";
 import SaveIcon from "@mui/icons-material/Save";
 import SearchIcon from "@mui/icons-material/Search";
 
-const CollectVehicle = () => {
+const DeliveredVehicle = () => {
   const [vehicleSearch, setVehicleSearch] = useState("");
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [charges, setCharges] = useState({
-    freight: "",
-    port_charges: "",
-    clearingcharges: "",
-    othercharges: "",
+    Transport_charges: 0, // Default to 0 to match schema default
+    othercharges: 0,     // Default to 0 to match schema default
   });
   const [totalAmount, setTotalAmount] = useState(0);
   const [amountPerVehicle, setAmountPerVehicle] = useState(0);
   const [portCollect, setPortCollect] = useState({
     date: new Date().toISOString().split("T")[0],
-    invoiceno: "",
     imageFile: null,
     imagePreview: null,
     imagePath: "",
-    admin_id: 1,
+    admin_id: 1, // Default admin_id to match schema relation
   });
 
-  // Search for a vehicle by vehicleId or chassisNo
+  // Search for a vehicle by chassisNo
   const searchVehicle = async () => {
     if (!vehicleSearch.trim()) {
-      setError("Please enter a Vehicle ID or Chassis Number.");
+      setError("Please enter a Chassis No to search.");
       return;
     }
 
@@ -52,17 +49,38 @@ const CollectVehicle = () => {
     setError("");
 
     try {
-      const response = await fetch(`/api/admin/collect/search?query=${encodeURIComponent(vehicleSearch)}`);
+      const response = await fetch(`/api/admin/deliever/search?query=${encodeURIComponent(vehicleSearch)}`);
       if (!response.ok) {
         throw new Error(`Failed to fetch vehicle: ${response.statusText}`);
       }
       const result = await response.json();
+      console.log("Search API response:", JSON.stringify(result, null, 2));
+
       if (result.status && result.data) {
-        const vehicle = result.data;
-        if (vehicles.some((v) => v.vehicleId === vehicle.vehicleId)) {
+        // Map vehicleId to id to align with ShowRoom_Vehicle schema
+        const vehicle = {
+          ...result.data,
+          id: result.data.vehicleId, // Map vehicleId to id
+          vehicleNo: result.data.chassisNo,
+          date: new Date().toISOString().split("T")[0], // Default date
+          Transport_charges: 0, // Match schema default
+          othercharges: 0,     // Match schema default
+          totalAmount: 0,      // Match schema default
+          vRepair_charges: 0,  // Match schema default
+          vamount: 0,          // Match schema default (will be set as divided amount)
+          vtotalAmount: 0,     // Match schema default
+          imagePath: "",       // Match schema default
+          admin_id: 0,         // Default admin_id (will be overridden by portCollect.admin_id on save)
+        };
+        console.log("Vehicle object to add:", JSON.stringify(vehicle, null, 2));
+        if (vehicles.some((v) => v.vehicleNo === vehicle.vehicleNo)) {
           setError("This vehicle is already added.");
         } else {
-          setVehicles((prev) => [...prev, vehicle]);
+          setVehicles((prev) => {
+            const updatedVehicles = [...prev, vehicle];
+            console.log("Updated vehicles state:", JSON.stringify(updatedVehicles, null, 2));
+            return updatedVehicles;
+          });
           setVehicleSearch("");
         }
       } else {
@@ -86,7 +104,7 @@ const CollectVehicle = () => {
     const { name, value } = e.target;
     setCharges((prev) => ({
       ...prev,
-      [name]: value ? parseFloat(value) : "",
+      [name]: value === "" ? 0 : parseFloat(value) || 0, // Default to 0 if empty or invalid
     }));
   };
 
@@ -109,6 +127,26 @@ const CollectVehicle = () => {
     }
   };
 
+  // Handle changes to vRepair_charges for individual vehicles
+  const handleRepairChargeChange = (vehicleNo, value) => {
+    const updatedVehicles = vehicles.map((vehicle) =>
+      vehicle.vehicleNo === vehicleNo
+        ? { ...vehicle, vRepair_charges: value === "" || isNaN(parseFloat(value)) ? 0 : parseFloat(value) }
+        : vehicle
+    );
+    setVehicles(updatedVehicles);
+  };
+
+  // Handle changes to vamount for individual vehicles (disabled for now, set from amountPerVehicle)
+  const handleVamountChange = (vehicleNo, value) => {
+    const updatedVehicles = vehicles.map((vehicle) =>
+      vehicle.vehicleNo === vehicleNo
+        ? { ...vehicle, vamount: value === "" || isNaN(parseFloat(value)) ? 0 : parseFloat(value) }
+        : vehicle
+    );
+    setVehicles(updatedVehicles);
+  };
+
   // Clean up preview URL
   useEffect(() => {
     return () => {
@@ -119,8 +157,8 @@ const CollectVehicle = () => {
   }, [portCollect.imagePreview]);
 
   // Remove a vehicle from the list
-  const removeVehicle = (vehicleId) => {
-    setVehicles((prev) => prev.filter((v) => v.vehicleId !== vehicleId));
+  const removeVehicle = (vehicleNo) => {
+    setVehicles((prev) => prev.filter((v) => v.vehicleNo !== vehicleNo));
   };
 
   // Convert file to Base64 (full data URL)
@@ -166,39 +204,39 @@ const CollectVehicle = () => {
       return fullPath;
     } catch (error) {
       console.error("Image upload error:", error);
-      throw error; // Re-throw to handle in handleSave
+      throw error;
     }
   };
 
   // Calculate total amount and amount per vehicle
   useEffect(() => {
-    const { freight, port_charges, clearingcharges, othercharges } = charges;
-    const total =
-      (freight || 0) +
-      (port_charges || 0) +
-      (clearingcharges || 0) +
-      (othercharges || 0);
+    const { Transport_charges, othercharges } = charges;
+    const total = (Transport_charges || 0) + (othercharges || 0);
     setTotalAmount(total);
 
     const totalVehicles = vehicles.length;
     const perVehicle = totalVehicles > 0 ? total / totalVehicles : 0;
     setAmountPerVehicle(perVehicle);
-  }, [charges, vehicles]);
 
-  // Save individual PortCollect records for each vehicle
+    // Update vamount for all vehicles based on the divided amount
+    setVehicles((prev) =>
+      prev.map((vehicle) => ({
+        ...vehicle,
+        vamount: perVehicle, // Set vamount as the divided amount
+      }))
+    );
+  }, [charges, vehicles.length]);
+
+  // Save individual records for each vehicle
   const handleSave = async () => {
-    if (!portCollect.invoiceno) {
-      setError("Invoice Number is required.");
-      return;
-    }
     if (vehicles.length === 0) {
       setError("Please add at least one vehicle.");
       return;
     }
-  
+
     setSaving(true);
     setError("");
-  
+
     try {
       let imagePath = portCollect.imagePath;
       if (portCollect.imageFile) {
@@ -209,49 +247,45 @@ const CollectVehicle = () => {
         }
         setPortCollect((prev) => ({ ...prev, imagePath }));
       }
-  
-      const portCollectData = vehicles.map((vehicle) => ({
-        vehicleNo: vehicle.vehicleId.toString(),
+
+      const vehicleData = vehicles.map((vehicle) => ({
+        vehicleNo: vehicle.vehicleNo,
         date: new Date(portCollect.date),
-        freight_amount: charges.freight || 0,
-        port_charges: charges.port_charges || 0,
-        clearingcharges: charges.clearingcharges || 0,
-        othercharges: charges.othercharges || 0,
-        totalAmount: amountPerVehicle,
-        vamount: amountPerVehicle,
-        invoiceno: portCollect.invoiceno,
+        Transport_charges: charges.Transport_charges,
+        othercharges: charges.othercharges,
+        totalAmount: amountPerVehicle + (vehicle.vRepair_charges || 0),
+        vRepair_charges: vehicle.vRepair_charges || 0,
+        vamount: vehicle.vamount || 0, // Divided amount per vehicle
+        vtotalAmount: (vehicle.vamount || 0) + (vehicle.vRepair_charges || 0), // Total with repair charges
         imagePath: imagePath || "",
         admin_id: portCollect.admin_id,
       }));
-  
-      console.log("Saving portCollectData:", JSON.stringify(portCollectData, null, 2));
-  
-      const response = await fetch("/api/admin/collect", {
+
+      console.log("Saving vehicleData:", JSON.stringify(vehicleData, null, 2));
+
+      const response = await fetch("/api/admin/deliever", { // Updated endpoint
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(portCollectData),
+        body: JSON.stringify(vehicleData),
       });
-  
-      const responseBody = await response.text(); // Get raw response body
+
+      const responseBody = await response.text();
       console.log("Server response status:", response.status);
       console.log("Server response body:", responseBody);
-  
+
       if (!response.ok) {
         throw new Error(`Failed to save data: ${response.statusText} - ${responseBody}`);
       }
-  
+
       const result = JSON.parse(responseBody);
       if (result.status) {
         alert(`Saved ${vehicles.length} vehicle records successfully!`);
         setCharges({
-          freight: "",
-          port_charges: "",
-          clearingcharges: "",
-          othercharges: "",
+          Transport_charges: 0, // Reset to 0 to match schema default
+          othercharges: 0,     // Reset to 0 to match schema default
         });
         setPortCollect({
           date: new Date().toISOString().split("T")[0],
-          invoiceno: "",
           imageFile: null,
           imagePreview: null,
           imagePath: "",
@@ -269,12 +303,10 @@ const CollectVehicle = () => {
     }
   };
 
-
-  
   return (
     <Paper sx={{ maxWidth: "1200px", mx: "auto", p: 3, mt: 4 }}>
       <Typography variant="h5" component="h1" gutterBottom>
-        Collect Vehicle Charges
+        Delivered Vehicle Charges
       </Typography>
 
       {/* Charges Input Form */}
@@ -294,30 +326,10 @@ const CollectVehicle = () => {
             InputLabelProps={{ shrink: true }}
           />
           <TextField
-            label="Freight"
-            name="freight"
+            label="Transport Charges"
+            name="Transport_charges"
             type="number"
-            value={charges.freight}
-            onChange={handleInputChange}
-            variant="outlined"
-            sx={{ flex: "1 1 200px" }}
-            InputProps={{ inputProps: { min: 0, step: "0.01" } }}
-          />
-          <TextField
-            label="Port Charges"
-            name="port_charges"
-            type="number"
-            value={charges.port_charges}
-            onChange={handleInputChange}
-            variant="outlined"
-            sx={{ flex: "1 1 200px" }}
-            InputProps={{ inputProps: { min: 0, step: "0.01" } }}
-          />
-          <TextField
-            label="Clearing Charges"
-            name="clearingcharges"
-            type="number"
-            value={charges.clearingcharges}
+            value={charges.Transport_charges === "" ? 0 : charges.Transport_charges}
             onChange={handleInputChange}
             variant="outlined"
             sx={{ flex: "1 1 200px" }}
@@ -327,20 +339,11 @@ const CollectVehicle = () => {
             label="Other Charges"
             name="othercharges"
             type="number"
-            value={charges.othercharges}
+            value={charges.othercharges === "" ? 0 : charges.othercharges}
             onChange={handleInputChange}
             variant="outlined"
             sx={{ flex: "1 1 200px" }}
             InputProps={{ inputProps: { min: 0, step: "0.01" } }}
-          />
-          <TextField
-            label="Invoice Number"
-            name="invoiceno"
-            value={portCollect.invoiceno}
-            onChange={handlePortCollectChange}
-            variant="outlined"
-            sx={{ flex: "1 1 200px" }}
-            required
           />
           <TextField
             label="Upload Image"
@@ -365,7 +368,7 @@ const CollectVehicle = () => {
           </Box>
         )}
         <TextField
-          label="Total Amount"
+          label="Total Amount (Divided per Vehicle)"
           value={totalAmount.toFixed(2)}
           variant="outlined"
           disabled
@@ -381,7 +384,7 @@ const CollectVehicle = () => {
         </Typography>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
           <TextField
-            label="Search Vehicle ID or Chassis No"
+            label="Search Chassis No"
             value={vehicleSearch}
             onChange={handleVehicleSearchChange}
             variant="outlined"
@@ -440,37 +443,69 @@ const CollectVehicle = () => {
           <Typography variant="h6" gutterBottom>
             Vehicles (Total: {vehicles.length})
           </Typography>
-          <Typography variant="subtitle1" gutterBottom>
-            Amount per Vehicle: ${amountPerVehicle.toFixed(2)}
-          </Typography>
           <TableContainer component={Paper}>
             <Table>
               <TableHead sx={{ bgcolor: "whitesmoke" }}>
                 <TableRow>
-                  <TableCell>Vehicle ID</TableCell>
+                  <TableCell>ID</TableCell>
                   <TableCell>Chassis No</TableCell>
                   <TableCell>Year</TableCell>
                   <TableCell>Color</TableCell>
                   <TableCell>CC</TableCell>
-                  <TableCell>Amount per Vehicle</TableCell>
+                  <TableCell>Repair Charges</TableCell>
+                  <TableCell>vAmount</TableCell>
+                  <TableCell>Total Charges</TableCell>
                   <TableCell>Action</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {vehicles.map((vehicle) => (
-                  <TableRow key={vehicle.vehicleId}>
-                    <TableCell>{vehicle.vehicleId}</TableCell>
-                    <TableCell>{vehicle.chassisNo}</TableCell>
-                    <TableCell>{vehicle.year}</TableCell>
-                    <TableCell>{vehicle.color}</TableCell>
-                    <TableCell>{vehicle.cc}</TableCell>
-                    <TableCell>${amountPerVehicle.toFixed(2)}</TableCell>
+                  <TableRow key={vehicle.vehicleNo}>
+                    <TableCell>{vehicle.id || "N/A"}</TableCell>
+                    <TableCell>{vehicle.vehicleNo || "N/A"}</TableCell>
+                    <TableCell>{vehicle.year || "N/A"}</TableCell>
+                    <TableCell>{vehicle.color || "N/A"}</TableCell>
+                    <TableCell>{vehicle.cc || "N/A"}</TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        value={vehicle.vRepair_charges === "" ? 0 : vehicle.vRepair_charges}
+                        onChange={(e) => handleRepairChargeChange(vehicle.vehicleNo, e.target.value)}
+                        variant="outlined"
+                        size="small"
+                        InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+                        sx={{ width: "120px" }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        value={vehicle.vamount === "" ? 0 : vehicle.vamount}
+                        onChange={(e) => handleVamountChange(vehicle.vehicleNo, e.target.value)}
+                        variant="outlined"
+                        size="small"
+                        InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+                        sx={{ width: "120px" }}
+                        disabled // Disabled to reflect calculated vamount from amountPerVehicle
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        value={((vehicle.vRepair_charges || 0) + (vehicle.vamount || 0)).toFixed(2)}
+                        variant="outlined"
+                        size="small"
+                        InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+                        sx={{ width: "120px" }}
+                        disabled // Total Charges is calculated
+                      />
+                    </TableCell>
                     <TableCell>
                       <Button
                         variant="outlined"
                         color="error"
                         size="small"
-                        onClick={() => removeVehicle(vehicle.vehicleId)}
+                        onClick={() => removeVehicle(vehicle.vehicleNo)}
                       >
                         Remove
                       </Button>
@@ -503,4 +538,4 @@ const CollectVehicle = () => {
   );
 };
 
-export default CollectVehicle;
+export default DeliveredVehicle;

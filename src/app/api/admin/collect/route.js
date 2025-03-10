@@ -3,118 +3,155 @@ import prisma from "@/utils/prisma"; // Adjust path to your Prisma client
 
 export async function POST(request) {
   try {
-    const data = await request.json();
+    const portCollectData = await request.json();
+    console.log("Received portCollectData:", JSON.stringify(portCollectData, null, 2));
 
-    if (!Array.isArray(data)) {
+    // Validate input
+    if (!Array.isArray(portCollectData) || portCollectData.length === 0) {
       return NextResponse.json(
-        { status: false, error: "Expected an array of PortCollect records" },
+        { status: false, error: "Invalid or empty data erat" },
         { status: 400 }
       );
     }
 
-    // Validate each record
-    for (const record of data) {
-      if (!record.vehicleNo || !record.invoiceno) {
-        return NextResponse.json(
-          { status: false, error: "Vehicle Number and Invoice Number are required for all records" },
-          { status: 400 }
-        );
-      }
-    }
+    // Start a transaction with increased timeout
+    const result = await prisma.$transaction(
+      async (tx) => {
+        try {
+          // 1. Create PortCollect records
+          console.log("Step 1: Creating PortCollect records...");
+          const portCollectResult = await tx.portCollect.createMany({
+            data: portCollectData.map((item) => ({
+              vehicleNo: item.vehicleNo,
+              date: new Date(item.date),
+              freight_amount: item.freight_amount,
+              port_charges: item.port_charges,
+              clearingcharges: item.clearingcharges,
+              othercharges: item.othercharges,
+              totalAmount: item.totalAmount,
+              vamount: item.vamount,
+              invoiceno: item.invoiceno,
+              imagePath: item.imagePath,
+              admin_id: item.admin_id,
+            })),
+            skipDuplicates: true,
+          });
+          console.log("PortCollect records created:", portCollectResult.count);
 
-    // Save all records in a transaction
-    const portCollects = await prisma.$transaction(
-      data.map((record) =>
-        prisma.portCollect.create({
-          data: {
-            vehicleNo: record.vehicleNo,
-            date: new Date(record.date),
-            freight_amount: record.freight_amount || 0,
-            port_charges: record.port_charges || 0,
-            clearingcharges: record.clearingcharges || 0,
-            othercharges: record.othercharges || 0,
-            totalAmount: record.totalAmount || 0,
-            vamount: record.vamount || 0,
-            invoiceno: record.invoiceno,
-            imagePath: record.imagePath || "",
-            admin_id: record.admin_id,
-          },
-        })
-      )
+          // 2. Update Admin balance and create Ledger entries
+          const adminIds = [...new Set(portCollectData.map((item) => item.admin_id))];
+          for (const adminId of adminIds) {
+            const totalNewBalance = portCollectData
+              .filter((item) => item.admin_id === adminId)
+              .reduce((sum, item) => sum + item.totalAmount, 0);
+
+            // Fetch current admin balance
+            console.log(`Step 2a: Fetching admin ${adminId}...`);
+            const admin = await tx.admin.findUnique({
+              where: { id: adminId },
+            });
+            if (!admin) {
+              throw new Error(`Admin with ID ${adminId} not found`);
+            }
+
+            const currentBalance = admin.balance || 0;
+            const newBalance = currentBalance + totalNewBalance;
+
+            // Update Admin balance
+            console.log(`Step 2b: Updating balance for admin ${adminId}...`);
+            await tx.admin.update({
+              where: { id: adminId },
+              data: { balance: newBalance },
+            });
+            console.log(`Updated balance for admin ${adminId}: ${newBalance}`);
+
+            // Create Ledger entries
+            console.log(`Step 2c: Creating Ledger entries for admin ${adminId}...`);
+            const ledgerEntries = portCollectData
+              .filter((item) => item.admin_id === adminId)
+              .map((item) => ({
+                admin_id: item.admin_id,
+                debit: 0.0,
+                credit: item.totalAmount,
+                balance: newBalance,
+                description: `Collected charges for vehicle ${item.vehicleNo} (Invoice: ${item.invoiceno})`,
+                transaction_at: new Date(),
+              }));
+            await tx.ledger.createMany({
+              data: ledgerEntries,
+              skipDuplicates: true,
+            });
+            console.log(`Ledger entries created for admin ${adminId}`);
+          }
+
+          // 3. Update AddVehicle status to "Collect"
+          const vehicleNos = portCollectData.map((item) => item.vehicleNo);
+          console.log("Step 3: Updating AddVehicle status...", vehicleNos);
+          const vehicleUpdateResult = await tx.addVehicle.updateMany({
+            where: {
+              id: { in: vehicleNos.map((no) => parseInt(no, 10)) }, // Assuming vehicleNo matches AddVehicle.id
+            },
+            data: {
+              status: "Collect",
+            },
+          });
+          console.log("Vehicles updated to Collect:", vehicleUpdateResult.count);
+
+          return portCollectResult;
+        } catch (innerError) {
+          console.error("Transaction inner error:", innerError.message, innerError.stack);
+          throw innerError; // Re-throw to rollback transaction
+        }
+      },
+      {
+        maxWait: 10000, // 10 seconds to acquire a connection
+        timeout: 20000, // 20 seconds for the transaction to complete
+      }
     );
 
-    return NextResponse.json({ status: true, data: portCollects }, { status: 201 });
+    return NextResponse.json({
+      status: true,
+      message: `Saved ${result.count} records, updated balances, added ledger entries, and set vehicle status to Collect`,
+    });
   } catch (error) {
-
+    console.error("Error saving port collect data:", error.message, error.stack);
     return NextResponse.json(
-      { status: false, error: "Failed to save PortCollect data" },
+      { status: false, error: "Internal Server Error: " + error.message },
       { status: 500 }
     );
   }
 }
 
 
-
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const query = searchParams.get("query");
-
-  if (!query) {
-    return NextResponse.json(
-      { status: false, error: "Query parameter is required" },
-      { status: 400 }
-    );
-  }
+  const id = searchParams.get("id");
 
   try {
-    // Log Prisma initialization
-    console.log("Prisma client initialized:", !!prisma);
-
-    // Check if AddVehicle model exists
-    if (!prisma.addVehicle) {
-      throw new Error("AddVehicle model not found in Prisma client");
+    if (id) {
+      // Fetch single PortCollect record
+      const record = await prisma.portCollect.findUnique({
+        where: { id: parseInt(id) },
+      });
+      if (!record) {
+        return NextResponse.json(
+          { status: false, error: "Record not found" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({ status: true, data: record });
+    } else {
+      // Fetch all PortCollect records
+      const records = await prisma.portCollect.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+      return NextResponse.json({ status: true, data: records });
     }
-
-    await prisma.$connect();
-    console.log("Database connection successful");
-
-    const vehicleId = parseInt(query, 10);
-    const isNumeric = !isNaN(vehicleId);
-
-    const vehicle = await prisma.addVehicle.findFirst({
-      where: {
-        OR: [
-          ...(isNumeric ? [{ id: vehicleId }] : []),
-          { chassisNo: query },
-        ],
-      },
-    });
-
-    if (!vehicle) {
-      return NextResponse.json(
-        { status: false, error: "No vehicle found for the given query" },
-        { status: 404 }
-      );
-    }
-
-    // Return vehicle data mapped to match CollectVehicle expectations
-    return NextResponse.json({
-      status: true,
-      data: {
-        vehicleId: vehicle.id, // Map 'id' to 'vehicleId'
-        chassisNo: vehicle.chassisNo,
-        year: vehicle.year,
-        color: vehicle.color,
-        cc: vehicle.engineType || "N/A", // Use engineType as a fallback for cc, or "N/A" if not applicable
-      },
-    });
   } catch (error) {
-    
+    console.error("GET error:", error);
     return NextResponse.json(
       { status: false, error: "Internal Server Error: " + error.message },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

@@ -2,22 +2,74 @@
 
 import { toast, ToastContainer } from 'react-toastify';
 import { useState, useEffect } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PencilIcon, TrashIcon, PlusIcon, Eye } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Loader } from 'lucide-react';
+import {
+  Container,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Button,
+  CircularProgress,
+  Divider,
+  Card,
+  CardContent,
+  Grid,
+  IconButton,
+  Stack,
+  Paper,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Select,
+  MenuItem,
+  InputLabel,
+  FormControl,
+  Box,
+  useTheme,
+} from '@mui/material';
+import { styled } from '@mui/material/styles';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import DownloadIcon from '@mui/icons-material/Download';
 import 'react-toastify/dist/ReactToastify.css';
 import { useSelector } from 'react-redux';
 
+// Custom styled components with Material Design principles
+const StyledCard = styled(Card)(({ theme }) => ({
+  borderRadius: theme.shape.borderRadius * 2,
+  boxShadow: theme.shadows[8],
+  background: theme.palette.background.paper,
+  border: `1px solid ${theme.palette.divider}`,
+}));
+
+const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
+  borderRadius: theme.shape.borderRadius,
+  boxShadow: theme.shadows[4],
+  maxHeight: '72vh',
+  overflowY: 'auto',
+  "& .MuiTableHead-root": {
+    backgroundColor: theme.palette.grey[100],
+    "& .MuiTableCell-root": {
+      color: theme.palette.text.primary,
+      fontWeight: theme.typography.fontWeightMedium,
+    },
+  },
+}));
+
 const fetchPaymentRequests = async () => {
-  const response = await fetch('/api/admin/payment-requests'); // Updated to match your GET API endpoint
+  const response = await fetch('/api/admin/payment-requests');
   if (!response.ok) {
     throw new Error('Failed to fetch payment requests');
   }
-  return response.json();
+  const data = await response.json();
+  return Array.isArray(data) ? data : data.data || []; // Ensure data is an array
 };
 
 export default function PaymentRequestManagement() {
@@ -27,12 +79,12 @@ export default function PaymentRequestManagement() {
   const [loadingAction, setLoadingAction] = useState('');
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [paymentImage, setPaymentImage] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [date1, setDate1] = useState('');
   const [date2, setDate2] = useState('');
   const [dialogMode, setDialogMode] = useState(null); // 'view', 'add', 'edit'
   const [formData, setFormData] = useState({
-    admin_id: '', // Changed from userid to admin_id
+    admin_id: '',
     transactionno: '',
     amount: '',
     img_url: '',
@@ -40,8 +92,7 @@ export default function PaymentRequestManagement() {
     verified_by: '',
   });
   const username = useSelector((state) => state.user.username);
-
-  const [searchQuery, setSearchQuery] = useState('');
+  const theme = useTheme();
 
   const handleSearch = (e) => {
     const query = e.target.value;
@@ -54,9 +105,9 @@ export default function PaymentRequestManagement() {
     console.log("The query is : ", query);
 
     const filtered = paymentRequests.filter((req) =>
-      req.transactionno?.toLowerCase().includes(query.toLowerCase()) ||
-      req.Admin?.fullname?.toLowerCase().includes(query.toLowerCase()) || // Changed from Users.name to Admin.fullname
-      req.status.toLowerCase().includes(query.toLowerCase())
+      (req.transactionno?.toLowerCase().includes(query.toLowerCase()) ||
+      req.Admin?.fullname?.toLowerCase().includes(query.toLowerCase()) ||
+      req.status.toLowerCase().includes(query.toLowerCase()))
     );
     setFilteredPaymentRequests(filtered);
   };
@@ -64,10 +115,16 @@ export default function PaymentRequestManagement() {
   useEffect(() => {
     fetchPaymentRequests()
       .then((data) => {
-        setPaymentRequests(data);
-        setFilteredPaymentRequests(data); // Set filtered data initially
+        console.log("Fetched payment requests:", data); // Debug log
+        setPaymentRequests(Array.isArray(data) ? data : data.data || []);
+        setFilteredPaymentRequests(Array.isArray(data) ? data : data.data || []);
       })
-      .catch((err) => toast.error(err.message))
+      .catch((err) => {
+        console.error('Fetch error:', err);
+        toast.error(err.message);
+        setPaymentRequests([]); // Set to empty array on error
+        setFilteredPaymentRequests([]); // Set to empty array on error
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -112,8 +169,6 @@ export default function PaymentRequestManagement() {
       if (response.ok) {
         toast.success(result.message || 'Payment request approved successfully!');
         setDialogMode(null);
-
-        // Optimistically update the payment request status in the state
         setPaymentRequests((prev) =>
           prev.map((req) =>
             req.id === selectedRequest.id ? { ...req, status: 'Approved', verified_by: username } : req
@@ -135,7 +190,7 @@ export default function PaymentRequestManagement() {
     try {
       const payload = { ...selectedRequest, status: 'Rejected', verified_by: username };
       const response = await fetch(
-        `/api/admin/payment-requests/reject/${selectedRequest.id}`, // Updated endpoint
+        `/api/admin/payment-requests/reject/${selectedRequest.id}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -147,8 +202,6 @@ export default function PaymentRequestManagement() {
 
       toast.success('Payment request rejected successfully!');
       setDialogMode(null);
-
-      // Optimistically update the payment request status in the state
       setPaymentRequests((prev) =>
         prev.map((req) =>
           req.id === selectedRequest.id ? { ...req, status: 'Rejected', verified_by: username } : req
@@ -165,7 +218,7 @@ export default function PaymentRequestManagement() {
     try {
       const payload = { ...formData, verified_by: username };
       const response = await fetch(
-        `/api/admin/payment-requests${dialogMode === 'edit' ? `/${formData.id}` : ''}`, // Updated endpoint
+        `/api/admin/payment-requests${dialogMode === 'edit' ? `/${formData.id}` : ''}`,
         {
           method: dialogMode === 'add' ? 'POST' : 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -180,7 +233,6 @@ export default function PaymentRequestManagement() {
       setDialogMode(null);
       setFormData({ admin_id: '', transactionno: '', amount: '', img_url: '', status: 'Pending' });
 
-      // Optimistically update the payment request in the state
       if (dialogMode === 'edit') {
         setPaymentRequests((prev) =>
           prev.map((req) =>
@@ -197,14 +249,12 @@ export default function PaymentRequestManagement() {
 
   const handleDelete = async (id) => {
     try {
-      const response = await fetch(`/api/admin/payment-requests/${id}`, { // Updated endpoint
+      const response = await fetch(`/api/admin/payment-requests/${id}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('Failed to delete payment request');
 
       toast.success('Payment request deleted successfully!');
-
-      // Optimistically remove the payment request from the state
       setPaymentRequests((prev) => prev.filter((req) => req.id !== id));
     } catch (err) {
       toast.error(err.message);
@@ -240,74 +290,96 @@ export default function PaymentRequestManagement() {
   };
 
   return (
-    <div>
+    <Container maxWidth="lg" sx={{ py: theme.spacing(4), px: theme.spacing(2) }}>
       <ToastContainer />
-      <div className="p-6">
-        <div className="mb-6 flex justify-between items-center">
-          <Input
-            type="text"
-            placeholder="Search payment requests..."
-            value={searchQuery}
-            onChange={(e) => handleSearch(e)}
-            className="pl-10 w-auto"
-          />
-          <div className="flex space-x-4 justify-end items-center mr-4">
-            <input
-              type="date"
-              value={date1}
-              onChange={(e) => setDate1(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2"
-            />
-            <input
-              type="date"
-              value={date2}
-              onChange={(e) => setDate2(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2"
-            />
-            <button
-              onClick={filterByDate}
-              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-            >
-              Filter
-            </button>
-          </div>
-        </div>
-        {isLoading ? (
-          <div className="flex justify-center">
-            <Loader className="h-8 w-8 animate-spin" />
-          </div>
-        ) : (
-          <div className="overflow-auto max-h-[72vh]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>No.</TableHead>
-                  <TableHead>Admin ID</TableHead> {/* Changed from UserId */}
-                  <TableHead>Admin</TableHead> {/* Changed from User */}
-                  <TableHead>Image</TableHead>
-                  <TableHead>Transaction No</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPaymentRequests.map((req, index) => (
-                  <TableRow key={req.id}>
+      <Typography
+        variant="h4"
+        component="h1"
+        gutterBottom
+        sx={{
+          fontWeight: theme.typography.fontWeightBold,
+          color: theme.palette.text.primary,
+          mb: theme.spacing(4),
+        }}
+      >
+        Payment Request Management
+      </Typography>
+
+      <Stack direction="row" spacing={2} sx={{ mb: theme.spacing(4), alignItems: 'center' }}>
+        <TextField
+          label="Search payment requests..."
+          variant="outlined"
+          value={searchQuery}
+          onChange={handleSearch}
+          sx={{ flexGrow: 1, maxWidth: 400 }}
+        />
+        <TextField
+          type="date"
+          value={date1}
+          onChange={(e) => setDate1(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          label="Start Date"
+          variant="outlined"
+        />
+        <TextField
+          type="date"
+          value={date2}
+          onChange={(e) => setDate2(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          label="End Date"
+          variant="outlined"
+        />
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={filterByDate}
+          sx={{ px: 4 }}
+        >
+          Filter
+        </Button>
+      </Stack>
+
+      {isLoading ? (
+        <Stack direction="row" justifyContent="center" sx={{ my: theme.spacing(4) }}>
+          <CircularProgress />
+        </Stack>
+      ) : (
+        <StyledTableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>No.</TableCell>
+                <TableCell>Admin ID</TableCell>
+                <TableCell>Admin</TableCell>
+                <TableCell>Image</TableCell>
+                <TableCell>Transaction No</TableCell>
+                <TableCell>Amount</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {Array.isArray(filteredPaymentRequests) ? (
+                filteredPaymentRequests.map((req, index) => (
+                  <TableRow
+                    key={req.id}
+                    hover
+                    sx={{ "&:hover": { backgroundColor: theme.palette.action.hover } }}
+                  >
                     <TableCell>{index + 1}</TableCell>
-                    <TableCell>{req.admin_id}</TableCell> {/* Changed from userid */}
-                    <TableCell>{req.Admin?.fullname || 'Unknown'}</TableCell> {/* Changed from Users.name */}
+                    <TableCell>{req.admin_id}</TableCell>
+                    <TableCell>{req.Admin?.fullname || 'Unknown'}</TableCell>
                     <TableCell>
                       {req.img_url ? (
                         <img
                           src={`${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_PATH}/${req.img_url}`}
-                          className="w-12 h-12"
+                          style={{ width: 48, height: 48 }}
                           alt="Payment"
                         />
                       ) : (
                         <img
                           src="/logo/logo1.jpg"
-                          className="w-24 h-24"
+                          style={{ width: 96, height: 96 }}
                           alt="Default"
                         />
                       )}
@@ -315,129 +387,155 @@ export default function PaymentRequestManagement() {
                     <TableCell>{req.transactionno}</TableCell>
                     <TableCell>{req.amount}</TableCell>
                     <TableCell>{req.status}</TableCell>
-                    <TableCell className="flex space-x-2">
-                      <Button
+                    <TableCell>
+                      <IconButton
+                        color="primary"
                         onClick={() => {
                           setSelectedRequest(req);
                           setDialogMode('view');
                         }}
-                        variant="ghost"
-                        className="text-indigo-600"
+                        title="View Details"
+                        sx={{ "&:hover": { color: theme.palette.primary.dark } }}
                       >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {/* <Button
+                        <VisibilityIcon />
+                      </IconButton>
+                      {/* Uncomment if you want to enable delete functionality */}
+                      {/* <IconButton
+                        color="error"
                         onClick={() => handleDelete(req.id)}
-                        variant="ghost"
-                        className="text-red-600"
+                        title="Delete"
+                        sx={{ "&:hover": { color: theme.palette.error.dark } }}
                       >
-                        <TrashIcon className="h-4 w-4" />
-                      </Button> */}
+                        <DeleteIcon />
+                      </IconButton> */}
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </div>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={8} align="center">
+                    <Typography variant="body1">No data available</Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </StyledTableContainer>
+      )}
 
-      <Dialog open={!!dialogMode} onOpenChange={() => setDialogMode(null)}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>
-              {dialogMode === 'view' && 'Payment Request Details'}
-              {dialogMode === 'add' && 'Add Payment Request'}
-              {dialogMode === 'edit' && 'Edit Payment Request'}
-            </DialogTitle>
-          </DialogHeader>
+      <Dialog open={!!dialogMode} onClose={() => setDialogMode(null)}>
+        <DialogTitle>
+          {dialogMode === 'view' && 'Payment Request Details'}
+          {dialogMode === 'add' && 'Add Payment Request'}
+          {dialogMode === 'edit' && 'Edit Payment Request'}
+        </DialogTitle>
+        <DialogContent>
           {dialogMode === 'view' && selectedRequest && (
-            <>
-              <div className='flex w-full'>
-                <div className="w-1/2 space-y-4">
-                  <div>
-                    <strong>Admin ID:</strong> {selectedRequest.admin_id} {/* Changed from UserId */}
-                  </div>
-                  <div>
+            <Stack spacing={2}>
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <Typography variant="body1">
+                    <strong>Admin ID:</strong> {selectedRequest.admin_id}
+                  </Typography>
+                  <Typography variant="body1">
                     <strong>Transaction No:</strong> {selectedRequest.transactionno}
-                  </div>
-                  <div>
+                  </Typography>
+                  <Typography variant="body1">
                     <strong>Amount:</strong> {selectedRequest.amount}
-                  </div>
-                  <div>
+                  </Typography>
+                  <Typography variant="body1">
                     <strong>Status:</strong> {selectedRequest.status}
-                  </div>
-                </div>
-                <div className='w-1/2'>
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
                   <img
                     src={`${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_PATH}/${selectedRequest.img_url}`}
                     alt="Payment"
-                    className="w-full h-80 object-contain"
+                    style={{ width: '100%', height: 320, objectFit: 'contain' }}
                   />
-                </div>
-              </div>
-              <div className="mt-4 flex w-full">
-                {selectedRequest.status !== 'Approved' && (
-                  <div className='flex justify-between w-full'>
-                    <div className='space-x-4'>
-                      <Button onClick={handleApprove}>
-                        {loadingAction === 'approve' ? <Loader className='animate-spin' /> : 'Approve'}
-                      </Button>
-                      <Button onClick={handleReject} className="bg-red-600">
-                        {loadingAction === 'reject' ? <Loader className='animate-spin' /> : 'Reject'}
-                      </Button>
-                    </div>
-                    <div>
-                      <Button
-                        onClick={() => handleDownloadImage(selectedRequest)}
-                        className="text-green-600 bg-white hover:bg-gray-100 border-green-600 border"
-                      >
-                        Download Image
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
+                </Grid>
+              </Grid>
+              {selectedRequest.status !== 'Approved' && (
+                <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleApprove}
+                    startIcon={loadingAction === 'approve' && <CircularProgress size={20} />}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    onClick={handleReject}
+                    startIcon={loadingAction === 'reject' && <CircularProgress size={20} />}
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="success"
+                    onClick={() => handleDownloadImage(selectedRequest)}
+                    startIcon={<DownloadIcon />}
+                  >
+                    Download Image
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
           )}
-          {dialogMode === 'add' || dialogMode === 'edit' ? (
-            <div className="space-y-4">
-              <Input
-                label="Admin ID" // Changed from UserId
-                name="admin_id" // Changed from userid
+          {(dialogMode === 'add' || dialogMode === 'edit') && (
+            <Stack spacing={2} sx={{ mt: 2 }}>
+              <TextField
+                label="Admin ID"
+                name="admin_id"
                 value={formData.admin_id}
                 onChange={handleInputChange}
+                variant="outlined"
+                fullWidth
               />
-              <Input
+              <TextField
                 label="Transaction No"
                 name="transactionno"
                 value={formData.transactionno}
                 onChange={handleInputChange}
+                variant="outlined"
+                fullWidth
               />
-              <Input
+              <TextField
                 label="Amount"
                 name="amount"
                 value={formData.amount}
                 onChange={handleInputChange}
+                variant="outlined"
+                fullWidth
               />
-              <div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  name="img_url"
-                  onChange={handleImageChange}
-                  className="mt-2"
-                />
-              </div>
-              <div className="mt-4">
-                <Button onClick={handleAction} className="w-full bg-green-600">
-                  {dialogMode === 'edit' ? 'Update' : 'Add'}
-                </Button>
-              </div>
-            </div>
-          ) : null}
+              <TextField
+                type="file"
+                name="img_url"
+                onChange={handleImageChange}
+                inputProps={{ accept: "image/*" }}
+                variant="outlined"
+                fullWidth
+              />
+              <Button
+                variant="contained"
+                color="success"
+                onClick={handleAction}
+                sx={{ mt: 2 }}
+              >
+                {dialogMode === 'edit' ? 'Update' : 'Add'}
+              </Button>
+            </Stack>
+          )}
         </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogMode(null)} color="primary">
+            Close
+          </Button>
+        </DialogActions>
       </Dialog>
-    </div>
+    </Container>
   );
 }

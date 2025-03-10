@@ -97,6 +97,18 @@ const Sidebar = () => {
       icon: <FaUsers />,
       roles: ["admin", "sub admin"],
     },
+
+    {
+      title: "Payments",
+      icon: <FiMenu />,
+      roles: ["admin", "sub admin"],
+      subitems: [
+        { title: "New Payment", path: "/admin-dashboard/Add-Payment", icon: <Hotel />, roles: ["admin", "sub admin"] },
+        { title: "Payment Requests", path: "/admin-dashboard/Payment-Management", icon: <Hotel />, roles: ["admin", "sub admin"] },
+      ],
+    },
+
+
     {
       title: "Main Management",
       icon: <FiMenu />,
@@ -150,6 +162,42 @@ const Sidebar = () => {
         { title: "Cargo List", path: "/admin-dashboard/cargo-management", icon: <FaListOl />, roles: ["admin", "sub admin"] },
       ],
     },
+
+
+    {
+      title: "Collect",
+      icon: <GiCargoShip />,
+      roles: ["admin", "sub admin"],
+      subitems: [
+        { title: "New Collect", path: "/admin-dashboard/CollectVehicle/NewCollect", icon: <IoIosAddCircle />, roles: ["admin", "sub admin"] },
+        { title: "Collect List", path: "/admin-dashboard/CollectVehicle", icon: <FaListOl />, roles: ["admin", "sub admin"] },
+      ],
+    },
+
+
+    {
+      title: "Show Room",
+      icon: <GiCargoShip />,
+      roles: ["admin", "sub admin"],
+      subitems: [
+        { title: "New Arrivals", path: "/admin-dashboard/Delievered/NewDeliever", icon: <IoIosAddCircle />, roles: ["admin", "sub admin"] },
+        { title: "Stock List", path: "/admin-dashboard/Delievered", icon: <FaListOl />, roles: ["admin", "sub admin"] },
+      ],
+    },
+
+
+
+    {
+      title: "Sales",
+      icon: <GiCargoShip />,
+      roles: ["admin", "sub admin"],
+      subitems: [
+        { title: "Sale Vehicle", path: "/admin-dashboard/Sale-Vehicle/New-Sale", icon: <IoIosAddCircle />, roles: ["admin", "sub admin"] },
+        { title: "Sale's List", path: "/admin-dashboard/Sale-Vehicle", icon: <FaListOl />, roles: ["admin", "sub admin"] },
+      ],
+    },
+
+
     {
       title: "Ledgers",
       path: "/admin-dashboard/Ledgers",
@@ -159,6 +207,14 @@ const Sidebar = () => {
     {
       title: "Bank Accounts",
       path: "/admin-dashboard/Bank-Accounts",
+      icon: <PiBank />,
+      roles: ["admin", "sub admin"],
+    },
+
+
+    {
+      title: "Expense Management",
+      path: "/admin-dashboard/expense-management",
       icon: <PiBank />,
       roles: ["admin", "sub admin"],
     },

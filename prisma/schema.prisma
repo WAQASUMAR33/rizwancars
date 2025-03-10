@@ -19,7 +19,7 @@ enum VehicleStatus {
   Transport
   Inspection
   Shipped
-  Destination
+  Collect
   Delievered
   Sold
 }
@@ -275,9 +275,11 @@ model ShowRoom_Vehicle {
   vehicleNo       String
   date            DateTime
   Transport_charges Float  @default(0)
-  Repair_charges  Float    @default(0)
   othercharges    Float    @default(0)
-  totalAmount     Float    @default(0)
+  totalAmount    Float    @default(0)
+  vRepair_charges  Float    @default(0)
+  vamount      Float  @default(0)
+  vtotalAmount     Float    @default(0)
   imagePath       String   @db.Text @default("")
   admin_id        Int
   createdAt       DateTime @default(now())
@@ -451,3 +453,6 @@ model PaymentRequests {
 
   @@index([admin_id])
 }
+
+
+
